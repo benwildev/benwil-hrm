@@ -55,20 +55,20 @@ export function CheckInOutCard({
   return (
     <div className="flex flex-col justify-between h-full gap-8">
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-[0.15em] text-primary-foreground/60">
+        <span className="text-xs font-medium uppercase tracking-[0.15em] text-white/60">
           Today&apos;s attendance
         </span>
         {done ? (
-          <div className="flex items-center gap-2 text-primary-foreground">
+          <div className="flex items-center gap-2 text-white">
             <CheckIcon className="size-5" />
             <p className="text-lg font-medium">You&apos;re done for the day</p>
           </div>
         ) : (
-          <p className="text-2xl font-semibold tracking-tight text-primary-foreground max-w-[22ch]">
+          <p className="text-2xl font-semibold tracking-tight text-white max-w-[22ch]">
             {!checkInTime ? "Ready when you are." : "You're checked in."}
           </p>
         )}
-        <p className="text-sm text-primary-foreground/70">
+        <p className="text-sm text-white/70">
           {!checkInTime
             ? "You haven't checked in today."
             : !checkOutTime
@@ -82,7 +82,7 @@ export function CheckInOutCard({
           <Button
             onClick={handleCheckIn}
             disabled={isPending}
-            className="h-12 w-full rounded-full text-sm font-semibold bg-primary-foreground text-primary hover:bg-primary-foreground/90 transition-all duration-300 active:scale-[0.97]"
+            className="h-12 w-full rounded-full text-sm font-bold bg-[#C52227] text-white hover:bg-[#A3181C] transition-all duration-300 active:scale-[0.97] cursor-pointer shadow-lg shadow-[#C52227]/30"
           >
             {isPending ? "Checking in…" : "Check in"}
             <ArrowRightIcon className="size-4" />
@@ -91,13 +91,13 @@ export function CheckInOutCard({
           <Button
             onClick={handleCheckOut}
             disabled={isPending}
-            className="h-12 w-full rounded-full text-sm font-semibold bg-transparent text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 transition-all duration-300 active:scale-[0.97]"
+            className="h-12 w-full rounded-full text-sm font-bold bg-white/15 text-white border border-white/30 hover:bg-[#C52227] hover:border-[#C52227] transition-all duration-300 active:scale-[0.97] cursor-pointer shadow-md"
           >
             {isPending ? "Checking out…" : "Check out"}
             <ArrowRightIcon className="size-4" />
           </Button>
         ) : null}
-        {error ? <p className="text-sm text-red-200">{error}</p> : null}
+        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
+import { cloudinary, isCloudinaryConfigured } from "@/server/storage/cloudinary-client";
 import bcrypt from "bcryptjs";
 
 export async function listEmployees() {
@@ -39,6 +40,7 @@ export async function listEmployeesForPicker() {
 export type EmployeeInput = {
   employeeCode: string;
   fullName: string;
+  profilePhotoUrl?: string | null;
   personalEmail?: string;
   workEmail?: string;
   phone?: string;
@@ -98,6 +100,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
       data: {
         employeeCode: input.employeeCode,
         fullName: input.fullName,
+        profilePhotoUrl: input.profilePhotoUrl || null,
         personalEmail: input.personalEmail,
         workEmail: input.workEmail,
         phone: input.phone,
@@ -131,6 +134,7 @@ export async function updateEmployee(id: string, input: EmployeeInput) {
     data: {
       employeeCode: input.employeeCode,
       fullName: input.fullName,
+      profilePhotoUrl: input.profilePhotoUrl !== undefined ? input.profilePhotoUrl : undefined,
       personalEmail: input.personalEmail,
       workEmail: input.workEmail,
       phone: input.phone,
@@ -155,7 +159,82 @@ export async function updateEmployee(id: string, input: EmployeeInput) {
   });
 }
 
+export async function uploadEmployeePhoto(
+  data: Buffer,
+  identifier = "avatar"
+): Promise<string> {
+  await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
+
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      "Cloudinary isn't configured yet. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to .env first."
+    );
+  }
+
+  const publicId = `employees/${identifier}_${Date.now()}`;
+  const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "benwil_hrm/employees",
+        public_id: publicId,
+        resource_type: "image",
+        overwrite: true,
+        invalidate: true,
+        transformation: [
+          { width: 400, height: 400, crop: "fill", gravity: "face" },
+        ],
+      },
+      (error, uploaded) => (error || !uploaded ? reject(error) : resolve(uploaded))
+    );
+    stream.end(data);
+  });
+
+  return result.secure_url;
+}
+
 export async function softDeleteEmployee(id: string) {
   await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
-  await prisma.employee.update({ where: { id }, data: { deletedAt: new Date() } });
+  return prisma.$transaction(async (tx) => {
+    const employee = await tx.employee.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+    if (employee?.userId) {
+      await tx.user.update({
+        where: { id: employee.userId },
+        data: { status: "INACTIVE" },
+      });
+    }
+    return tx.employee.update({
+      where: { id },
+      data: { deletedAt: new Date(), employmentStatus: "TERMINATED" },
+    });
+  });
 }
+
+export type EmployeePaymentDetailsInput = {
+  paymentMethod: string;
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  bankRoutingNumber?: string | null;
+  mobileBankingProvider?: string | null;
+  mobileBankingNumber?: string | null;
+};
+
+export async function updateEmployeePaymentDetails(id: string, input: EmployeePaymentDetailsInput) {
+  await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
+  return prisma.employee.update({
+    where: { id },
+    data: {
+      paymentMethod: input.paymentMethod,
+      bankName: input.bankName ?? null,
+      bankAccountName: input.bankAccountName ?? null,
+      bankAccountNumber: input.bankAccountNumber ?? null,
+      bankRoutingNumber: input.bankRoutingNumber ?? null,
+      mobileBankingProvider: input.mobileBankingProvider ?? null,
+      mobileBankingNumber: input.mobileBankingNumber ?? null,
+    },
+  });
+}
+

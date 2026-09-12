@@ -25,6 +25,15 @@ export type CompanyUpdateInput = Partial<{
   phone: string | null;
   email: string | null;
   taxId: string | null;
+  timezone: string;
+  weekendDays: string;
+  enableAbsenceDeduction: boolean;
+  absenceCalculationBasis: string;
+  absenceDeductionRate: number;
+  enableLateDeduction: boolean;
+  lateGraceCount: number;
+  lateDeductionBasis: string;
+  lateDeductionRate: number;
   primaryColor: string;
   primaryForeground: string;
   accentColor: string;

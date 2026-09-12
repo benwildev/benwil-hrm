@@ -73,7 +73,7 @@ export function oklchToHex(oklch: string): string {
 export function contrastingForeground(oklchColor: string): string {
   const match = /oklch\(\s*([\d.]+)/.exec(oklchColor);
   const lightness = match ? parseFloat(match[1]) : 0.5;
-  return lightness > 0.6 ? "oklch(0.145 0 0)" : "oklch(0.985 0 0)";
+  return lightness > 0.72 ? "oklch(0.145 0 0)" : "oklch(0.985 0 0)";
 }
 
 const OKLCH_PATTERN = /^oklch\(\s*[\d.]+\s+[\d.]+\s+[\d.]+\s*\)$/;

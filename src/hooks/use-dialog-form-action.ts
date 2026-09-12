@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useTransition } from "react";
 
 // Drives a dialog whose form submits a server action and should close itself
@@ -8,21 +10,33 @@ import { useState, useTransition } from "react";
 // that already owns the state update does not.
 export function useDialogFormAction<TState>(
   action: (prevState: TState | undefined, formData: FormData) => Promise<TState>,
-  isSuccess: (state: TState) => boolean,
+  isSuccess?: (state: TState) => boolean,
 ) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<TState | undefined>(undefined);
   const [isPending, startTransition] = useTransition();
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setState(undefined);
+    }
+  };
+
   function formAction(formData: FormData) {
     startTransition(async () => {
       const result = await action(state, formData);
       setState(result);
-      if (isSuccess(result)) {
-        setOpen(false);
+
+      const hasSucceeded = typeof isSuccess === "function"
+        ? isSuccess(result)
+        : !result || (typeof result === "object" && !("error" in (result as Record<string, unknown>)));
+
+      if (hasSucceeded) {
+        handleOpenChange(false);
       }
     });
   }
 
-  return { open, setOpen, state, formAction, isPending };
+  return { open, setOpen: handleOpenChange, state, formAction, isPending };
 }

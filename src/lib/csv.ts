@@ -1,6 +1,10 @@
 function escapeCsvCell(value: unknown): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  if (/[",\n]/.test(str)) {
+  let str = value === null || value === undefined ? "" : String(value);
+  // Neutralize spreadsheet formula injection characters (=, +, -, @, \t, \r)
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;

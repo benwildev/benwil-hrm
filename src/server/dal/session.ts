@@ -16,7 +16,25 @@ export class UnauthenticatedError extends Error {
   }
 }
 
-export const getSession = cache(async () => auth());
+import { prisma } from "@/lib/prisma";
+
+export const getSession = cache(async () => {
+  const session = await auth();
+  if (session?.user && !session.user.employeeId && session.user.id) {
+    try {
+      const emp = await prisma.employee.findUnique({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (emp) {
+        session.user.employeeId = emp.id;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return session;
+});
 
 export async function requireUser() {
   const session = await getSession();

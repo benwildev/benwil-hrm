@@ -7,29 +7,38 @@ datasource db {
   provider = "postgresql"
 }
 
-// ==================== Company ====================
+// ==================== Company (Singleton) ====================
 
 model Company {
-  id                String   @id @default("singleton")
-  name              String   @default("My Company")
-  legalName         String?  @map("legal_name")
-  logoUrl           String?  @map("logo_url")
-  addressLine       String?  @map("address_line")
-  city              String?
-  state             String?
-  country           String?
-  postalCode        String?  @map("postal_code")
-  phone             String?
-  email             String?
-  taxId             String?  @map("tax_id")
-  primaryColor      String   @default("oklch(0.205 0 0)") @map("primary_color")
-  primaryForeground String   @default("oklch(0.985 0 0)") @map("primary_foreground")
-  accentColor       String   @default("oklch(0.97 0 0)") @map("accent_color")
-  accentForeground  String   @default("oklch(0.205 0 0)") @map("accent_foreground")
-  sidebarPrimary    String   @default("oklch(0.205 0 0)") @map("sidebar_primary")
-  sidebarAccent     String   @default("oklch(0.97 0 0)") @map("sidebar_accent")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                      String   @id @default("singleton")
+  name                    String   @default("My Company")
+  legalName               String?  @map("legal_name")
+  logoUrl                 String?  @map("logo_url")
+  addressLine             String?  @map("address_line")
+  city                    String?
+  state                   String?
+  country                 String?
+  postalCode              String?  @map("postal_code")
+  phone                   String?
+  email                   String?
+  taxId                   String?  @map("tax_id")
+  timezone                String   @default("UTC")
+  weekendDays             String   @default("0,6") @map("weekend_days")
+  enableAbsenceDeduction  Boolean  @default(true) @map("enable_absence_deduction")
+  absenceCalculationBasis String   @default("WORKING_DAYS") @map("absence_calculation_basis")
+  absenceDeductionRate    Decimal  @default(100) @map("absence_deduction_rate") @db.Decimal(5, 2)
+  enableLateDeduction     Boolean  @default(false) @map("enable_late_deduction")
+  lateGraceCount          Int      @default(3) @map("late_grace_count")
+  lateDeductionBasis      String   @default("ONE_DAY_PER_3_LATES") @map("late_deduction_basis")
+  lateDeductionRate       Decimal  @default(100) @map("late_deduction_rate") @db.Decimal(5, 2)
+  primaryColor            String   @default("oklch(0.205 0 0)") @map("primary_color")
+  primaryForeground       String   @default("oklch(0.985 0 0)") @map("primary_foreground")
+  accentColor             String   @default("oklch(0.97 0 0)") @map("accent_color")
+  accentForeground        String   @default("oklch(0.205 0 0)") @map("accent_foreground")
+  sidebarPrimary          String   @default("oklch(0.205 0 0)") @map("sidebar_primary")
+  sidebarAccent           String   @default("oklch(0.97 0 0)") @map("sidebar_accent")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@map("companies")
 }
@@ -69,7 +78,7 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-// ==================== Auth (login identity only) ====================
+// ==================== Auth & Audit ====================
 
 enum UserStatus {
   ACTIVE
@@ -88,14 +97,17 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  employee Employee?
-  accounts Account[]
-  sessions Session[]
+  employee          Employee?
+  accounts          Account[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  adjustmentsMade   AttendanceAdjustment[] @relation("AdjustedBy")
+  leaveReviews      LeaveRequest[]         @relation("ReviewedBy")
+  payrollsRun       PayrollPeriod[]        @relation("ProcessedBy")
+  disbursementsMade PayrollRecord[]        @relation("DisbursedBy")
 
-  adjustmentsMade AttendanceAdjustment[] @relation("AdjustedBy")
-  leaveReviews    LeaveRequest[]         @relation("ReviewedBy")
-  payrollsRun     PayrollPeriod[]        @relation("ProcessedBy")
-
+  @@index([roleId])
+  @@index([status])
   @@map("users")
 }
 
@@ -116,6 +128,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -127,6 +140,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -137,6 +151,26 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 
 // ==================== Organization ====================
@@ -166,31 +200,33 @@ model Designation {
 }
 
 model Shift {
-  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String
-  startTime            DateTime @map("start_time") @db.Time
-  endTime              DateTime @map("end_time") @db.Time
-  gracePeriodMinutes   Int      @default(0) @map("grace_period_minutes")
-  requiredWorkMinutes  Int?     @map("required_work_minutes")
-  breakMinutes         Int      @default(0) @map("break_minutes")
-  isOvernight          Boolean  @default(false) @map("is_overnight")
-  isActive             Boolean  @default(true) @map("is_active")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  startTime           DateTime @map("start_time") @db.Time
+  endTime             DateTime @map("end_time") @db.Time
+  gracePeriodMinutes  Int      @default(0) @map("grace_period_minutes")
+  requiredWorkMinutes Int?     @map("required_work_minutes")
+  breakMinutes        Int      @default(0) @map("break_minutes")
+  isOvernight         Boolean  @default(false) @map("is_overnight")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  employees        Employee[]
+  employees         Employee[]
   attendanceRecords AttendanceRecord[]
 
   @@map("shifts")
 }
 
 model Holiday {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  date               DateTime @db.Date
-  name               String
-  isRecurringYearly  Boolean  @default(false) @map("is_recurring_yearly")
-  createdAt          DateTime @default(now()) @map("created_at")
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date              DateTime @db.Date
+  name              String
+  isRecurringYearly Boolean  @default(false) @map("is_recurring_yearly")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@index([date])
   @@map("holidays")
 }
 
@@ -212,10 +248,10 @@ enum EmploymentStatus {
 }
 
 model Employee {
-  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeCode     String  @unique @map("employee_code")
-  fullName         String  @map("full_name")
-  profilePhotoUrl  String? @map("profile_photo_url")
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeCode    String  @unique @map("employee_code")
+  fullName        String  @map("full_name")
+  profilePhotoUrl String? @map("profile_photo_url")
 
   dateOfBirth   DateTime? @map("date_of_birth") @db.Date
   gender        String?
@@ -223,10 +259,10 @@ model Employee {
   nationality   String?
   bloodGroup    String?   @map("blood_group")
 
-  personalEmail   String? @map("personal_email")
-  workEmail       String? @map("work_email")
-  phone           String?
-  alternatePhone  String? @map("alternate_phone")
+  personalEmail  String? @map("personal_email")
+  workEmail      String? @map("work_email")
+  phone          String?
+  alternatePhone String? @map("alternate_phone")
 
   presentAddress   String? @map("present_address") @db.Text
   permanentAddress String? @map("permanent_address") @db.Text
@@ -239,25 +275,33 @@ model Employee {
   employmentType   EmploymentType?  @map("employment_type")
   employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
 
-  departmentId String?      @map("department_id") @db.Uuid
-  department   Department?  @relation(fields: [departmentId], references: [id])
+  departmentId String?     @map("department_id") @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   designationId String?      @map("designation_id") @db.Uuid
-  designation   Designation? @relation(fields: [designationId], references: [id])
+  designation   Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
 
   shiftId String? @map("shift_id") @db.Uuid
-  shift   Shift?  @relation(fields: [shiftId], references: [id])
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
 
   reportingManagerId String?    @map("reporting_manager_id") @db.Uuid
-  reportingManager    Employee?  @relation("EmployeeManager", fields: [reportingManagerId], references: [id])
-  directReports       Employee[] @relation("EmployeeManager")
+  reportingManager   Employee?  @relation("EmployeeManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  directReports      Employee[] @relation("EmployeeManager")
 
   resignationDate DateTime? @map("resignation_date") @db.Date
   terminationDate DateTime? @map("termination_date") @db.Date
   exitReason      String?   @map("exit_reason") @db.Text
 
+  paymentMethod         String  @default("BANK_TRANSFER") @map("payment_method")
+  bankName              String? @map("bank_name")
+  bankAccountName       String? @map("bank_account_name")
+  bankAccountNumber     String? @map("bank_account_number")
+  bankRoutingNumber     String? @map("bank_routing_number")
+  mobileBankingProvider String? @map("mobile_banking_provider")
+  mobileBankingNumber   String? @map("mobile_banking_number")
+
   userId String? @unique @map("user_id") @db.Uuid
-  user   User?   @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -273,6 +317,12 @@ model Employee {
   salaryComponents      EmployeeSalaryComponent[]
   payrollRecords        PayrollRecord[]
 
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([shiftId])
+  @@index([reportingManagerId])
+  @@index([employmentStatus])
+  @@index([deletedAt])
   @@map("employees")
 }
 
@@ -287,6 +337,7 @@ model EmployeeDocument {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  @@index([employeeId])
   @@map("employee_documents")
 }
 
@@ -296,7 +347,7 @@ model BiometricDevice {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deviceName       String    @map("device_name")
   deviceType       String?   @map("device_type")
-  deviceIdentifier String?   @map("device_identifier")
+  deviceIdentifier String    @unique @map("device_identifier")
   ipAddress        String?   @map("ip_address")
   locationName     String?   @map("location_name")
   status           String    @default("active")
@@ -316,18 +367,24 @@ enum PunchType {
 }
 
 model BiometricLog {
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId       String?          @map("employee_id") @db.Uuid
-  employee         Employee?        @relation(fields: [employeeId], references: [id])
-  deviceId         String?          @map("device_id") @db.Uuid
-  device           BiometricDevice? @relation(fields: [deviceId], references: [id])
-  biometricUserId  String?          @map("biometric_user_id")
-  punchTime        DateTime         @map("punch_time")
-  punchType        PunchType        @default(UNKNOWN) @map("punch_type")
-  rawData          Json?            @map("raw_data")
-  createdAt        DateTime         @default(now()) @map("created_at")
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId      String?          @map("employee_id") @db.Uuid
+  employee        Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  deviceId        String?          @map("device_id") @db.Uuid
+  device          BiometricDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  biometricUserId String?          @map("biometric_user_id")
+  punchTime       DateTime         @map("punch_time")
+  punchType       PunchType        @default(UNKNOWN) @map("punch_type")
+  deviceEventId   String?          @map("device_event_id")
+  isProcessed     Boolean          @default(false) @map("is_processed")
+  processedAt     DateTime?        @map("processed_at")
+  rawData         Json?            @map("raw_data")
+  createdAt       DateTime         @default(now()) @map("created_at")
 
+  @@unique([deviceId, deviceEventId])
   @@index([employeeId, punchTime])
+  @@index([deviceId, punchTime])
+  @@index([isProcessed, punchTime])
   @@map("biometric_logs")
 }
 
@@ -354,7 +411,7 @@ model AttendanceRecord {
   employeeId String   @map("employee_id") @db.Uuid
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   shiftId    String?  @map("shift_id") @db.Uuid
-  shift      Shift?   @relation(fields: [shiftId], references: [id])
+  shift      Shift?   @relation(fields: [shiftId], references: [id], onDelete: SetNull)
 
   attendanceDate DateTime @map("attendance_date") @db.Date
 
@@ -379,15 +436,18 @@ model AttendanceRecord {
   adjustments AttendanceAdjustment[]
 
   @@unique([employeeId, attendanceDate])
+  @@index([attendanceDate])
+  @@index([status, attendanceDate])
+  @@index([shiftId])
   @@map("attendance_records")
 }
 
 model AttendanceAdjustment {
-  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  attendanceId String         @map("attendance_id") @db.Uuid
-  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
-  employeeId String           @map("employee_id") @db.Uuid
-  employee   Employee         @relation(fields: [employeeId], references: [id])
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attendanceId String           @map("attendance_id") @db.Uuid
+  attendance   AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employeeId   String           @map("employee_id") @db.Uuid
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   oldCheckIn  DateTime? @map("old_check_in")
   oldCheckOut DateTime? @map("old_check_out")
@@ -397,24 +457,26 @@ model AttendanceAdjustment {
   reason String @db.Text
 
   adjustedById String? @map("adjusted_by") @db.Uuid
-  adjustedBy   User?   @relation("AdjustedBy", fields: [adjustedById], references: [id])
+  adjustedBy   User?   @relation("AdjustedBy", fields: [adjustedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([attendanceId])
+  @@index([employeeId])
   @@map("attendance_adjustments")
 }
 
 // ==================== Leave ====================
 
 model LeaveType {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String   @unique
-  description  String?
-  daysPerYear  Decimal? @map("days_per_year") @db.Decimal(5, 2)
-  isPaid       Boolean  @default(true) @map("is_paid")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  daysPerYear Decimal? @map("days_per_year") @db.Decimal(5, 2)
+  isPaid      Boolean  @default(true) @map("is_paid")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   balances EmployeeLeaveBalance[]
   requests LeaveRequest[]
@@ -423,22 +485,23 @@ model LeaveType {
 }
 
 model EmployeeLeaveBalance {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId String   @map("employee_id") @db.Uuid
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveTypeId String  @map("leave_type_id") @db.Uuid
-  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
 
   year Int
 
-  allocatedDays  Decimal @default(0) @map("allocated_days") @db.Decimal(5, 2)
-  usedDays       Decimal @default(0) @map("used_days") @db.Decimal(5, 2)
-  remainingDays  Decimal @default(0) @map("remaining_days") @db.Decimal(5, 2)
+  allocatedDays Decimal @default(0) @map("allocated_days") @db.Decimal(5, 2)
+  usedDays      Decimal @default(0) @map("used_days") @db.Decimal(5, 2)
+  remainingDays Decimal @default(0) @map("remaining_days") @db.Decimal(5, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId, year])
   @@map("employee_leave_balances")
 }
 
@@ -450,15 +513,17 @@ enum LeaveStatus {
 }
 
 model LeaveRequest {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employeeId String    @map("employee_id") @db.Uuid
-  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveTypeId String   @map("leave_type_id") @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
   leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
 
-  startDate DateTime @map("start_date") @db.Date
-  endDate   DateTime @map("end_date") @db.Date
-  totalDays Decimal  @map("total_days") @db.Decimal(5, 2)
+  startDate      DateTime @map("start_date") @db.Date
+  endDate        DateTime @map("end_date") @db.Date
+  totalDays      Decimal  @map("total_days") @db.Decimal(5, 2)
+  isHalfDay      Boolean  @default(false) @map("is_half_day")
+  halfDaySession String?  @map("half_day_session")
 
   reason        String? @db.Text
   attachmentUrl String? @map("attachment_url") @db.Text
@@ -466,13 +531,17 @@ model LeaveRequest {
   status LeaveStatus @default(PENDING)
 
   reviewedById String?   @map("reviewed_by") @db.Uuid
-  reviewedBy   User?     @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedBy   User?     @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt   DateTime? @map("reviewed_at")
   reviewNote   String?   @map("review_note") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([status])
+  @@index([employeeId, status])
+  @@index([leaveTypeId])
+  @@index([startDate, endDate])
   @@map("leave_requests")
 }
 
@@ -499,6 +568,7 @@ model EmployeeSalary {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([employeeId, effectiveFrom])
   @@map("employee_salaries")
 }
 
@@ -513,13 +583,14 @@ enum CalculationType {
 }
 
 model SalaryComponent {
-  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String
-  componentType    ComponentType   @map("component_type")
-  calculationType  CalculationType @default(FIXED) @map("calculation_type")
-  defaultAmount    Decimal         @default(0) @map("default_amount") @db.Decimal(12, 2)
-  isActive         Boolean         @default(true) @map("is_active")
-  createdAt        DateTime        @default(now()) @map("created_at")
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String          @unique
+  componentType   ComponentType   @map("component_type")
+  calculationType CalculationType @default(FIXED) @map("calculation_type")
+  defaultAmount   Decimal         @default(0) @map("default_amount") @db.Decimal(12, 2)
+  isActive        Boolean         @default(true) @map("is_active")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at")
 
   employeeComponents EmployeeSalaryComponent[]
 
@@ -532,7 +603,7 @@ model EmployeeSalaryComponent {
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   salaryComponentId String          @map("salary_component_id") @db.Uuid
-  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id])
+  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Cascade)
 
   amount Decimal @db.Decimal(12, 2)
 
@@ -540,7 +611,10 @@ model EmployeeSalaryComponent {
   effectiveTo   DateTime? @map("effective_to") @db.Date
 
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@index([employeeId, effectiveFrom])
+  @@index([salaryComponentId])
   @@map("employee_salary_components")
 }
 
@@ -549,7 +623,10 @@ model EmployeeSalaryComponent {
 enum PayrollPeriodStatus {
   DRAFT
   PROCESSING
+  CALCULATED
   COMPLETED
+  APPROVED
+  PAID
   LOCKED
 }
 
@@ -565,13 +642,15 @@ model PayrollPeriod {
 
   processedAt   DateTime? @map("processed_at")
   processedById String?   @map("processed_by") @db.Uuid
-  processedBy   User?     @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedBy   User?     @relation("ProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   records PayrollRecord[]
 
   @@unique([year, month])
+  @@index([status])
   @@map("payroll_periods")
 }
 
@@ -586,17 +665,22 @@ model PayrollRecord {
   payrollPeriodId String        @map("payroll_period_id") @db.Uuid
   payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
   employeeId      String        @map("employee_id") @db.Uuid
-  employee        Employee      @relation(fields: [employeeId], references: [id])
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
-  basicSalary      Decimal @default(0) @map("basic_salary") @db.Decimal(12, 2)
-  totalEarnings    Decimal @default(0) @map("total_earnings") @db.Decimal(12, 2)
-  totalDeductions  Decimal @default(0) @map("total_deductions") @db.Decimal(12, 2)
-  overtimeAmount   Decimal @default(0) @map("overtime_amount") @db.Decimal(12, 2)
-  bonusAmount      Decimal @default(0) @map("bonus_amount") @db.Decimal(12, 2)
-  netSalary        Decimal @default(0) @map("net_salary") @db.Decimal(12, 2)
+  basicSalary     Decimal @default(0) @map("basic_salary") @db.Decimal(12, 2)
+  totalEarnings   Decimal @default(0) @map("total_earnings") @db.Decimal(12, 2)
+  totalDeductions Decimal @default(0) @map("total_deductions") @db.Decimal(12, 2)
+  overtimeAmount  Decimal @default(0) @map("overtime_amount") @db.Decimal(12, 2)
+  bonusAmount     Decimal @default(0) @map("bonus_amount") @db.Decimal(12, 2)
+  netSalary       Decimal @default(0) @map("net_salary") @db.Decimal(12, 2)
 
-  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
-  paidAt        DateTime?     @map("paid_at")
+  paymentStatus    PaymentStatus @default(PENDING) @map("payment_status")
+  paidAt           DateTime?     @map("paid_at")
+  paymentMethod    String?       @map("payment_method")
+  paymentReference String?       @map("payment_reference")
+  paymentNote      String?       @map("payment_note") @db.Text
+  disbursedById    String?       @map("disbursed_by_id") @db.Uuid
+  disbursedBy      User?         @relation("DisbursedBy", fields: [disbursedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -605,6 +689,9 @@ model PayrollRecord {
   payslip Payslip?
 
   @@unique([payrollPeriodId, employeeId])
+  @@index([employeeId])
+  @@index([payrollPeriodId])
+  @@index([paymentStatus])
   @@map("payroll_records")
 }
 
@@ -620,6 +707,7 @@ model PayrollItem {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([payrollRecordId])
   @@map("payroll_items")
 }
 

@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { getCompany } from "@/server/dal/company";
 
 // The current moment, re-encoded so its UTC getters read like the server's
 // local wall clock — matching the "naive wall clock stored as UTC" convention
 // every other timestamp in this app uses (shift times, device punches, CSV
-// imports). Correct as long as the server process runs in the company's own
-// timezone, which is the assumption this whole convention rests on.
+// imports).
 export function nowAsUtcNominal() {
   const now = new Date();
   return new Date(
@@ -12,9 +12,20 @@ export function nowAsUtcNominal() {
   );
 }
 
-export function isWeekend(date: Date) {
+export async function getCompanyWeekendDays(): Promise<number[]> {
+  try {
+    const company = await getCompany();
+    const raw = company.weekendDays || "0,6";
+    const days = raw.split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n));
+    return days.length > 0 ? days : [0, 6];
+  } catch {
+    return [0, 6];
+  }
+}
+
+export function isWeekend(date: Date, customWeekendDays: number[] = [0, 6]) {
   const day = date.getUTCDay();
-  return day === 0 || day === 6; // Sunday, Saturday
+  return customWeekendDays.includes(day);
 }
 
 export async function findHolidayForDate(day: Date) {
@@ -47,6 +58,7 @@ export async function getHolidayChecker() {
 export async function defaultStatusForDate(day: Date): Promise<"HOLIDAY" | "WEEKEND" | "ABSENT"> {
   const holiday = await findHolidayForDate(day);
   if (holiday) return "HOLIDAY";
-  if (isWeekend(day)) return "WEEKEND";
+  const weekendDays = await getCompanyWeekendDays();
+  if (isWeekend(day, weekendDays)) return "WEEKEND";
   return "ABSENT";
 }

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { AttendanceSource } from "@/generated/prisma/client";
-import { findHolidayForDate, isWeekend } from "@/server/attendance/calendar";
+import { findHolidayForDate, isWeekend, getCompanyWeekendDays } from "@/server/attendance/calendar";
 import { computeShiftMetrics } from "@/server/attendance/metrics";
 
 // All dates/times are handled in UTC for simplicity, since there is no
@@ -71,7 +71,8 @@ export async function aggregateAttendanceForDate(employeeId: string, date: Date)
   } else if (approvedLeave) {
     status = "LEAVE";
   } else if (!checkIn) {
-    status = isWeekend(day) ? "WEEKEND" : "ABSENT";
+    const weekendDays = await getCompanyWeekendDays();
+    status = isWeekend(day, weekendDays) ? "WEEKEND" : "ABSENT";
   } else {
     checkInSource = existing?.checkInSource === "MANUAL" ? "MANUAL" : "BIOMETRIC";
     if (checkOut) {

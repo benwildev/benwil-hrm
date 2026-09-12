@@ -1,23 +1,8 @@
 import { redirect } from "next/navigation";
-import Image from "next/image";
-import { Building2Icon } from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
-import { AppSidebarNav } from "@/components/layout/nav-main";
-import { UserMenu } from "@/components/layout/user-menu";
 import { getSession } from "@/server/dal/session";
 import { getCompany } from "@/server/dal/company";
+import { getLiveNotifications } from "@/server/dal/notifications";
+import { TopNav } from "@/components/layout/top-nav";
 
 export default async function DashboardLayout({
   children,
@@ -29,52 +14,25 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const company = await getCompany();
+  const [company, notifications] = await Promise.all([
+    getCompany(),
+    getLiveNotifications(),
+  ]);
 
   return (
-    <SidebarProvider>
-      <Sidebar collapsible="icon">
-        <SidebarHeader>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" render={<a href="/dashboard" />}>
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
-                  {company.logoUrl ? (
-                    <Image src={company.logoUrl} alt={company.name} width={32} height={32} className="size-full object-cover" />
-                  ) : (
-                    <Building2Icon className="size-4" />
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col text-left leading-tight">
-                  <span className="truncate font-medium">{company.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">HRM</span>
-                </div>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <AppSidebarNav permissions={session.user.permissions} />
-        </SidebarContent>
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <UserMenu
-                name={session.user.name ?? session.user.email ?? "User"}
-                email={session.user.email ?? ""}
-                roleName={session.user.roleName}
-              />
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="min-h-screen bg-[#edf0f5]/60 flex flex-col font-sans antialiased text-neutral-900">
+      <TopNav
+        companyName={company.name}
+        companyLogoUrl={company.logoUrl}
+        userName={session.user.name ?? session.user.email ?? "Admin User"}
+        userEmail={session.user.email ?? ""}
+        userRole={session.user.roleName ?? "Admin"}
+        permissions={session.user.permissions}
+        notifications={notifications}
+      />
+      <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8">
+        {children}
+      </main>
+    </div>
   );
 }

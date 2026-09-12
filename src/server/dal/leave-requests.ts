@@ -2,13 +2,28 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, requireUser } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { adjustUsedDays } from "@/server/dal/leave-balances";
+import { isWeekend, getHolidayChecker, getCompanyWeekendDays } from "@/server/attendance/calendar";
 
 function toUtcDate(dateStr: string) {
   return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
-function countDays(start: Date, end: Date) {
-  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+async function countWorkingDays(start: Date, end: Date) {
+  const [isHoliday, weekendDays] = await Promise.all([
+    getHolidayChecker(),
+    getCompanyWeekendDays(),
+  ]);
+  let count = 0;
+  for (
+    let d = new Date(start);
+    d.getTime() <= end.getTime();
+    d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+  ) {
+    if (!isWeekend(d, weekendDays) && !isHoliday(d)) {
+      count++;
+    }
+  }
+  return count;
 }
 
 export async function listMyLeaveRequests() {
@@ -44,6 +59,8 @@ export async function applyForLeave(input: {
   startDate: string;
   endDate: string;
   reason?: string;
+  isHalfDay?: boolean;
+  halfDaySession?: "FIRST_HALF" | "SECOND_HALF";
 }) {
   const user = await requireUser();
   if (!user.employeeId) {
@@ -51,11 +68,26 @@ export async function applyForLeave(input: {
   }
 
   const startDate = toUtcDate(input.startDate);
-  const endDate = toUtcDate(input.endDate);
+  const endDate = input.isHalfDay ? startDate : toUtcDate(input.endDate);
   if (endDate.getTime() < startDate.getTime()) {
     throw new Error("End date must be on or after the start date.");
   }
-  const totalDays = countDays(startDate, endDate);
+
+  const [isHoliday, weekendDays] = await Promise.all([
+    getHolidayChecker(),
+    getCompanyWeekendDays(),
+  ]);
+
+  if (input.isHalfDay) {
+    if (isWeekend(startDate, weekendDays) || isHoliday(startDate)) {
+      throw new Error("Cannot apply for half-day leave on a weekend or company holiday.");
+    }
+  }
+
+  const totalDays = input.isHalfDay ? 0.5 : await countWorkingDays(startDate, endDate);
+  if (totalDays <= 0) {
+    throw new Error("The selected date range only includes weekends or official company holidays.");
+  }
 
   return prisma.leaveRequest.create({
     data: {
@@ -64,6 +96,8 @@ export async function applyForLeave(input: {
       startDate,
       endDate,
       totalDays,
+      isHalfDay: Boolean(input.isHalfDay),
+      halfDaySession: input.isHalfDay ? input.halfDaySession : null,
       reason: input.reason,
       status: "PENDING",
     },
@@ -150,17 +184,25 @@ export async function reviewLeaveRequest(
         days.push(new Date(d));
       }
 
+      const [isHoliday, weekendDays] = await Promise.all([
+        getHolidayChecker(),
+        getCompanyWeekendDays(),
+      ]);
       for (const day of days) {
+        if (isWeekend(day, weekendDays) || isHoliday(day)) {
+          continue; // Don't overwrite weekends or holidays with LEAVE
+        }
         const existing = await tx.attendanceRecord.findUnique({
           where: { employeeId_attendanceDate: { employeeId: request.employeeId, attendanceDate: day } },
         });
         if (existing && (existing.status === "PRESENT" || existing.status === "LATE")) {
           continue; // already actually attended that day — don't overwrite
         }
+        const attendanceStatus = request.isHalfDay ? "HALF_DAY" : "LEAVE";
         await tx.attendanceRecord.upsert({
           where: { employeeId_attendanceDate: { employeeId: request.employeeId, attendanceDate: day } },
-          create: { employeeId: request.employeeId, attendanceDate: day, status: "LEAVE" },
-          update: { status: "LEAVE" },
+          create: { employeeId: request.employeeId, attendanceDate: day, status: attendanceStatus },
+          update: { status: attendanceStatus },
         });
       }
     }

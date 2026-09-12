@@ -26,3 +26,12 @@ export async function loginAction(
     throw error;
   }
 }
+
+export async function changeOwnPasswordAction(
+  currentPassword: string,
+  newPassword: string,
+) {
+  const { updateOwnPassword } = await import("@/server/dal/roles");
+  await updateOwnPassword(currentPassword, newPassword);
+}
+

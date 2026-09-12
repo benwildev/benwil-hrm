@@ -33,6 +33,15 @@ export async function updateCompanyProfileAction(
       phone: optionalString(formData, "phone"),
       email: optionalString(formData, "email"),
       taxId: optionalString(formData, "taxId"),
+      timezone: optionalString(formData, "timezone") ?? "UTC",
+      weekendDays: optionalString(formData, "weekendDays") ?? "0,6",
+      enableAbsenceDeduction: formData.get("enableAbsenceDeduction") === "true" || formData.get("enableAbsenceDeduction") === "on",
+      absenceCalculationBasis: optionalString(formData, "absenceCalculationBasis") ?? "WORKING_DAYS",
+      absenceDeductionRate: Number(formData.get("absenceDeductionRate") || 100),
+      enableLateDeduction: formData.get("enableLateDeduction") === "true" || formData.get("enableLateDeduction") === "on",
+      lateGraceCount: Math.max(0, parseInt(String(formData.get("lateGraceCount") || "0"), 10)),
+      lateDeductionBasis: optionalString(formData, "lateDeductionBasis") ?? "ONE_DAY_PER_3_LATES",
+      lateDeductionRate: Number(formData.get("lateDeductionRate") || 100),
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to update company." };

@@ -14,20 +14,14 @@ export default async function NewEmployeePage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold">New employee</h1>
-        <p className="text-sm text-muted-foreground">Add a new employee record.</p>
-      </div>
-      <EmployeeForm
-        mode="create"
-        action={createEmployeeAction}
-        departments={departments}
-        designations={designations}
-        shifts={shifts}
-        managers={managers.map((m) => ({ id: m.id, name: `${m.fullName} (${m.employeeCode})` }))}
-        roles={roles}
-      />
-    </div>
+    <EmployeeForm
+      mode="create"
+      action={createEmployeeAction}
+      departments={departments}
+      designations={designations}
+      shifts={shifts}
+      managers={managers.map((m) => ({ id: m.id, name: `${m.fullName} (${m.employeeCode})` }))}
+      roles={roles}
+    />
   );
 }

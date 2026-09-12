@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon, AlertCircleIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,7 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RunPayrollButton } from "@/components/payroll/run-payroll-button";
 import { LockPayrollButton } from "@/components/payroll/lock-payroll-button";
+import { redirect } from "next/navigation";
 import { getPayrollPeriod } from "@/server/dal/payroll";
+import { getSession } from "@/server/dal/session";
+import { PERMISSIONS } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -25,7 +29,50 @@ export default async function PayrollPeriodPage({
   params: Promise<{ periodId: string }>;
 }) {
   const { periodId } = await params;
+  const session = await getSession();
+  const canViewAll =
+    session?.user.roleName === "Admin" ||
+    (session?.user.roleName !== "Employee" &&
+      Boolean(session?.user.permissions.includes(PERMISSIONS.PAYROLL_VIEW_ALL)));
+  const canRun =
+    session?.user.roleName === "Admin" ||
+    (session?.user.roleName !== "Employee" &&
+      Boolean(session?.user.permissions.includes(PERMISSIONS.PAYROLL_RUN)));
+
+  if (!canViewAll) {
+    if (session?.user.employeeId) {
+      const myRecord = await prisma.payrollRecord.findFirst({
+        where: { payrollPeriodId: periodId, employeeId: session.user.employeeId },
+        select: { id: true },
+      });
+      if (myRecord) {
+        redirect(`/payroll/${periodId}/${myRecord.id}`);
+      }
+    }
+    redirect("/payroll/my");
+  }
+
   const period = await getPayrollPeriod(periodId);
+
+  // Check for active employees who were excluded from this period because they have no salary structure.
+  // System administrators without salaries are treated as platform operators and exempt from payroll.
+  const activeEmployeesWithoutSalary = await prisma.employee.findMany({
+    where: {
+      deletedAt: null,
+      employmentStatus: { in: ["ACTIVE", "ON_LEAVE"] },
+      OR: [
+        { user: null },
+        { user: { role: { name: { not: "Admin" } } } },
+      ],
+      salaries: {
+        none: {
+          effectiveFrom: { lte: period.endDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: period.startDate } }],
+        },
+      },
+    },
+    select: { id: true, fullName: true, employeeCode: true },
+  });
 
   const totalNet = period.records.reduce((sum, r) => sum + Number(r.netSalary), 0);
 
@@ -37,10 +84,21 @@ export default async function PayrollPeriodPage({
           Back to payroll
         </Button>
         <div className="flex items-center gap-2">
-          {period.status === "DRAFT" || period.status === "PROCESSING" ? (
-            <RunPayrollButton periodId={period.id} />
+          {period.records.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<a href={`/api/export/payroll/${period.id}/bank-disbursement`} download />}
+            >
+              <DownloadIcon className="size-4" />
+              <span>Export Bank File</span>
+            </Button>
           ) : null}
-          {period.status === "COMPLETED" ? <LockPayrollButton periodId={period.id} /> : null}
+          {canRun && period.status !== "LOCKED" ? (
+            <RunPayrollButton periodId={period.id} isRerun={period.status === "COMPLETED"} />
+          ) : null}
+          {canRun && period.status === "COMPLETED" ? <LockPayrollButton periodId={period.id} /> : null}
         </div>
       </div>
 
@@ -53,6 +111,29 @@ export default async function PayrollPeriodPage({
       <p className="text-sm text-muted-foreground">
         {period.records.length} employees · Total net {totalNet.toFixed(2)}
       </p>
+
+      {activeEmployeesWithoutSalary.length > 0 && (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 text-xs text-amber-900 flex items-start gap-3">
+          <AlertCircleIcon className="size-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">
+              {activeEmployeesWithoutSalary.length} active employee{activeEmployeesWithoutSalary.length > 1 ? "s are" : " is"} missing from this payroll run
+            </p>
+            <p className="text-amber-800/90 leading-relaxed">
+              The following employee(s) have no basic salary configured:{" "}
+              {activeEmployeesWithoutSalary.map((e, idx) => (
+                <span key={e.id}>
+                  <Link href={`/employees/${e.id}`} className="font-medium underline hover:text-amber-950">
+                    {e.fullName} ({e.employeeCode})
+                  </Link>
+                  {idx < activeEmployeesWithoutSalary.length - 1 ? ", " : ""}
+                </span>
+              ))}
+              . Configure their basic salary under their profile, then click <strong>"Recalculate Payroll"</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       <Table>
         <TableHeader>

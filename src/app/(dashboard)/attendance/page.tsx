@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeftIcon, ChevronRightIcon, UploadIcon, RadioTowerIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, UploadIcon, RadioTowerIcon, ClockIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,6 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EditAttendanceDialog } from "@/components/attendance/edit-attendance-dialog";
 import { listAttendanceForDate } from "@/server/dal/attendance";
+import { redirect } from "next/navigation";
+import { getSession } from "@/server/dal/session";
+import { PERMISSIONS } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 import { defaultStatusForDate, nowAsUtcNominal } from "@/server/attendance/calendar";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -42,6 +46,42 @@ export default async function AttendancePage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
+  const session = await getSession();
+  const canViewAll = session?.user.permissions.includes(PERMISSIONS.ATTENDANCE_VIEW_ALL);
+
+  // If user is a regular employee without company-wide view rights, route them to their personal attendance
+  if (!canViewAll) {
+    let employeeId = session?.user.employeeId;
+    if (!employeeId && session?.user?.id) {
+      const emp = await prisma.employee.findUnique({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (emp) {
+        employeeId = emp.id;
+      }
+    }
+
+    if (employeeId) {
+      redirect(`/attendance/${employeeId}`);
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center">
+        <div className="p-4 rounded-full bg-amber-50 text-amber-600 mb-4">
+          <ClockIcon className="size-8" />
+        </div>
+        <h2 className="text-xl font-semibold text-neutral-900">Attendance Portal</h2>
+        <p className="text-sm text-neutral-500 max-w-md mt-2">
+          Your account is not currently linked to an active employee record. Please contact your HR administrator to connect your profile.
+        </p>
+        <Button variant="outline" className="mt-6" nativeButton={false} render={<Link href="/dashboard" />}>
+          Back to dashboard
+        </Button>
+      </div>
+    );
+  }
+
   const { date: dateParam } = await searchParams;
   const date = dateParam ?? nowAsUtcNominal().toISOString().slice(0, 10);
   const dayDate = new Date(`${date}T00:00:00.000Z`);

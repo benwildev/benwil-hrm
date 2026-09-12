@@ -14,7 +14,13 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 export default async function CompanySettingsPage() {
   await requirePermission(PERMISSIONS.COMPANY_MANAGE);
-  const company = await getCompany();
+  const rawCompany = await getCompany();
+
+  const company = {
+    ...rawCompany,
+    absenceDeductionRate: rawCompany.absenceDeductionRate ? Number(rawCompany.absenceDeductionRate) : 100,
+    lateDeductionRate: rawCompany.lateDeductionRate ? Number(rawCompany.lateDeductionRate) : 100,
+  };
 
   return (
     <div className="flex flex-col gap-4">

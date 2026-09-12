@@ -13,7 +13,7 @@ async function main() {
     await prisma.permission.upsert({
       where: { key: def.key },
       update: { group: def.group, description: def.description },
-      create: def,
+      create: { key: def.key, group: def.group, description: def.description },
     });
   }
   const allPermissions = await prisma.permission.findMany();
@@ -32,10 +32,21 @@ async function main() {
     skipDuplicates: true,
   });
 
-  await prisma.role.upsert({
+  // Employee role with standard default permissions
+  const employeeRole = await prisma.role.upsert({
     where: { name: "Employee" },
     update: { isSystem: true },
     create: { name: "Employee", description: "Standard employee access", isSystem: true },
+  });
+
+  const { EMPLOYEE_DEFAULT_PERMISSIONS } = await import("../src/lib/permissions");
+  const employeePerms = await prisma.permission.findMany({
+    where: { key: { in: EMPLOYEE_DEFAULT_PERMISSIONS } },
+  });
+  await prisma.rolePermission.deleteMany({ where: { roleId: employeeRole.id } });
+  await prisma.rolePermission.createMany({
+    data: employeePerms.map((p) => ({ roleId: employeeRole.id, permissionId: p.id })),
+    skipDuplicates: true,
   });
 
   console.log("Seeding company profile...");

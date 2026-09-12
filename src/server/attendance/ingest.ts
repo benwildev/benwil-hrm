@@ -25,26 +25,29 @@ export async function ingestPunches(
   let matched = 0;
   let unmatched = 0;
 
-  for (const punch of punches) {
+  const logData = punches.map((punch) => {
     const employeeId = employeeByPin.get(punch.biometricUserId) ?? null;
-    if (employeeId) matched++;
-    else unmatched++;
-
-    await prisma.biometricLog.create({
-      data: {
-        employeeId,
-        deviceId: options.deviceId,
-        biometricUserId: punch.biometricUserId,
-        punchTime: punch.punchTime,
-        punchType: "UNKNOWN",
-        rawData: { raw: punch.raw },
-      },
-    });
-
     if (employeeId) {
+      matched++;
       const day = new Date(dayKey(punch.punchTime));
       affected.set(`${employeeId}:${day.toISOString()}`, { employeeId, date: day });
+    } else {
+      unmatched++;
     }
+    return {
+      employeeId,
+      deviceId: options.deviceId,
+      biometricUserId: punch.biometricUserId,
+      punchTime: punch.punchTime,
+      punchType: "UNKNOWN" as const,
+      rawData: { raw: punch.raw },
+    };
+  });
+
+  if (logData.length > 0) {
+    await prisma.biometricLog.createMany({
+      data: logData,
+    });
   }
 
   for (const { employeeId, date } of affected.values()) {

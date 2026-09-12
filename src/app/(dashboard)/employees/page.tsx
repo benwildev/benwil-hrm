@@ -1,98 +1,76 @@
 import Link from "next/link";
-import { PlusIcon, DownloadIcon, PencilIcon } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { PlusIcon, DownloadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DeleteEmployeeButton } from "@/components/employees/delete-employee-button";
 import { listEmployees } from "@/server/dal/employees";
+import { listDepartments } from "@/server/dal/organization";
 import { getSession } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  ACTIVE: "default",
-  ON_LEAVE: "secondary",
-  RESIGNED: "secondary",
-  TERMINATED: "destructive",
-  INACTIVE: "secondary",
-};
+import { EmployeeDirectoryView } from "@/components/employees/employee-directory-view";
 
 export default async function EmployeesPage() {
-  const [employees, session] = await Promise.all([listEmployees(), getSession()]);
+  const [employees, departments, session] = await Promise.all([
+    listEmployees(),
+    listDepartments(),
+    getSession(),
+  ]);
+
   const canManage = session?.user.permissions.includes(PERMISSIONS.EMPLOYEES_MANAGE) ?? false;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Employees</h1>
-          <p className="text-sm text-muted-foreground">{employees.length} employees</p>
+    <div className="mx-auto max-w-7xl space-y-6 pb-16">
+      {/* Top Header Section */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Workforce</span>
+            <span>/</span>
+            <span className="text-foreground">Personnel Roster</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              Employees
+            </h1>
+            <span className="inline-flex items-center rounded-full border border-border/80 bg-muted/50 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+              {employees.length} Total
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Manage personnel directory, department structures, roles, and profiles.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" nativeButton={false} render={<a href="/api/export/employees" />}>
-            <DownloadIcon />
+
+        {/* Header Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<a href="/api/export/employees" />}
+            className="h-9 gap-2 rounded-xl border-border/80 bg-background/80 px-3.5 text-xs font-medium shadow-2xs hover:bg-muted/60"
+          >
+            <DownloadIcon className="h-3.5 w-3.5 text-muted-foreground" />
             Export CSV
           </Button>
-          <Button nativeButton={false} render={<Link href="/employees/new" />}>
-            <PlusIcon />
-            New employee
-          </Button>
+          {canManage ? (
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/employees/new" />}
+              className="h-9 gap-2 rounded-xl bg-foreground px-4 text-xs font-semibold text-background shadow-sm hover:bg-foreground/90 transition-transform active:scale-98"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add Employee
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Employee code</TableHead>
-            <TableHead>Department</TableHead>
-            <TableHead>Designation</TableHead>
-            <TableHead>Status</TableHead>
-            {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {employees.map((employee) => (
-            <TableRow key={employee.id}>
-              <TableCell className="font-medium">
-                <Link href={`/employees/${employee.id}`} className="hover:underline">
-                  {employee.fullName}
-                </Link>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{employee.employeeCode}</TableCell>
-              <TableCell>{employee.department?.name ?? "—"}</TableCell>
-              <TableCell>{employee.designation?.name ?? "—"}</TableCell>
-              <TableCell>
-                <Badge variant={STATUS_VARIANT[employee.employmentStatus] ?? "secondary"}>
-                  {employee.employmentStatus.replace("_", " ")}
-                </Badge>
-              </TableCell>
-              {canManage ? (
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      nativeButton={false}
-                      render={<Link href={`/employees/${employee.id}/edit`} />}
-                    >
-                      <PencilIcon />
-                      <span className="sr-only">Edit {employee.fullName}</span>
-                    </Button>
-                    <DeleteEmployeeButton employeeId={employee.id} employeeName={employee.fullName} />
-                  </div>
-                </TableCell>
-              ) : null}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      {/* Main Interactive Directory Component */}
+      <EmployeeDirectoryView
+        employees={employees}
+        departments={departments}
+        canManage={canManage}
+      />
     </div>
   );
 }

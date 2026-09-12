@@ -33,7 +33,16 @@ export async function listAttendanceForDate(date: Date) {
 export async function listAttendanceForEmployee(employeeId: string, year: number, month: number) {
   const user = await requireUser();
   const canViewAll = user.permissions.includes(PERMISSIONS.ATTENDANCE_VIEW_ALL);
-  if (!canViewAll && user.employeeId !== employeeId) {
+  let effectiveEmployeeId = user.employeeId;
+  if (!effectiveEmployeeId && user.id) {
+    const emp = await prisma.employee.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    effectiveEmployeeId = emp?.id ?? null;
+  }
+
+  if (!canViewAll && effectiveEmployeeId !== employeeId) {
     throw new Error("Not authorized to view this employee's attendance.");
   }
 

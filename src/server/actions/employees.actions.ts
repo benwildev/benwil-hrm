@@ -31,6 +31,7 @@ function parseEmployeeInput(formData: FormData): EmployeeInput | { error: string
   return {
     employeeCode,
     fullName,
+    profilePhotoUrl: str(formData, "profilePhotoUrl") || null,
     joiningDate,
     employmentStatus,
     employmentType: str(formData, "employmentType") as EmployeeInput["employmentType"],
@@ -105,3 +106,64 @@ export async function deleteEmployeeAction(employeeId: string) {
   await softDeleteEmployee(employeeId);
   revalidatePath("/employees");
 }
+
+export async function updateEmployeePaymentDetailsAction(
+  employeeId: string,
+  _prevState: EmployeeFormState,
+  formData: FormData,
+): Promise<EmployeeFormState> {
+  const paymentMethod = str(formData, "paymentMethod");
+  if (!paymentMethod) return { error: "Payment method is required." };
+
+  try {
+    const { updateEmployeePaymentDetails } = await import("@/server/dal/employees");
+    await updateEmployeePaymentDetails(employeeId, {
+      paymentMethod,
+      bankName: str(formData, "bankName") || null,
+      bankAccountName: str(formData, "bankAccountName") || null,
+      bankAccountNumber: str(formData, "bankAccountNumber") || null,
+      bankRoutingNumber: str(formData, "bankRoutingNumber") || null,
+      mobileBankingProvider: str(formData, "mobileBankingProvider") || null,
+      mobileBankingNumber: str(formData, "mobileBankingNumber") || null,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to update payment details." };
+  }
+
+  revalidatePath(`/employees/${employeeId}`);
+  return undefined;
+}
+
+export async function changeUserRoleAction(
+  userId: string,
+  roleId: string,
+  employeeId: string,
+) {
+  const { updateUserRole } = await import("@/server/dal/roles");
+  await updateUserRole(userId, roleId);
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+}
+
+export async function changeUserPasswordAction(
+  userId: string,
+  newPassword: string,
+  employeeId: string,
+) {
+  const { updateUserPassword } = await import("@/server/dal/roles");
+  await updateUserPassword(userId, newPassword);
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+}
+
+export async function createPortalAccessAction(
+  employeeId: string,
+  input: { email: string; roleId: string; password: string },
+) {
+  const { createUserPortalAccess } = await import("@/server/dal/roles");
+  await createUserPortalAccess(employeeId, input);
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+}
+
+

@@ -14,6 +14,8 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { EditAttendanceDialog } from "@/components/attendance/edit-attendance-dialog";
 import { listAttendanceForEmployee } from "@/server/dal/attendance";
 import { getHolidayChecker, isWeekend, nowAsUtcNominal } from "@/server/attendance/calendar";
+import { getSession } from "@/server/dal/session";
+import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -43,19 +45,24 @@ export default async function EmployeeAttendancePage({
   searchParams,
 }: {
   params: Promise<{ employeeId: string }>;
-  searchParams: Promise<{ year?: string; month?: string }>;
+  searchParams?: Promise<{ year?: string; month?: string }>;
 }) {
   const { employeeId } = await params;
-  const { year: yearParam, month: monthParam } = await searchParams;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const { year: yearParam, month: monthParam } = resolvedSearchParams;
   const now = nowAsUtcNominal();
   const year = yearParam ? Number(yearParam) : now.getUTCFullYear();
   const month = monthParam ? Number(monthParam) : now.getUTCMonth() + 1;
 
-  const [employee, records, isHoliday] = await Promise.all([
+  const [session, employee, records, isHoliday] = await Promise.all([
+    getSession(),
     prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, select: { id: true, fullName: true, employeeCode: true } }),
     listAttendanceForEmployee(employeeId, year, month),
     getHolidayChecker(),
   ]);
+
+  const canViewAll = session?.user.permissions.includes(PERMISSIONS.ATTENDANCE_VIEW_ALL) ?? false;
+  const canManage = session?.user.permissions.includes(PERMISSIONS.ATTENDANCE_MANAGE) ?? false;
 
   const byDate = new Map(records.map((r) => [r.attendanceDate.toISOString().slice(0, 10), r]));
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -73,9 +80,14 @@ export default async function EmployeeAttendancePage({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/attendance" />}>
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
+          render={<Link href={canViewAll ? "/attendance" : "/dashboard"} />}
+        >
           <ArrowLeftIcon />
-          Back to attendance
+          {canViewAll ? "Back to attendance" : "Back to dashboard"}
         </Button>
       </div>
 
@@ -142,7 +154,7 @@ export default async function EmployeeAttendancePage({
             <TableHead>Late</TableHead>
             <TableHead>Overtime</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="w-1" />
+            {canManage ? <TableHead className="w-1" /> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -163,16 +175,18 @@ export default async function EmployeeAttendancePage({
                     {(record?.status ?? fallbackStatus).replace("_", " ")}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  <EditAttendanceDialog
-                    employeeId={employeeId}
-                    employeeName={employee.fullName}
-                    date={dateStr}
-                    checkIn={record?.checkIn ?? null}
-                    checkOut={record?.checkOut ?? null}
-                    status={record?.status ?? fallbackStatus}
-                  />
-                </TableCell>
+                {canManage ? (
+                  <TableCell>
+                    <EditAttendanceDialog
+                      employeeId={employeeId}
+                      employeeName={employee.fullName}
+                      date={dateStr}
+                      checkIn={record?.checkIn ?? null}
+                      checkOut={record?.checkOut ?? null}
+                      status={record?.status ?? fallbackStatus}
+                    />
+                  </TableCell>
+                ) : null}
               </TableRow>
             );
           })}

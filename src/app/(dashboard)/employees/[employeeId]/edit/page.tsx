@@ -25,17 +25,14 @@ export default async function EditEmployeePage({
   const action = updateEmployeeAction.bind(null, employeeId);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold">Edit {employee.fullName}</h1>
-      </div>
-      <EmployeeForm
-        mode="edit"
+    <EmployeeForm
+      mode="edit"
         action={action}
         currentEmployeeId={employee.id}
         defaults={{
           employeeCode: employee.employeeCode,
           fullName: employee.fullName,
+          profilePhotoUrl: employee.profilePhotoUrl,
           personalEmail: employee.personalEmail,
           workEmail: employee.workEmail,
           phone: employee.phone,
@@ -63,6 +60,5 @@ export default async function EditEmployeePage({
         managers={managers.map((m) => ({ id: m.id, name: `${m.fullName} (${m.employeeCode})` }))}
         roles={[]}
       />
-    </div>
   );
 }
