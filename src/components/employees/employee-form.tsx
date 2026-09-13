@@ -196,7 +196,7 @@ export function EmployeeForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-8 max-w-[1340px] mx-auto w-full">
-      
+
       {/* ================= PAGE HEADER & BREADCRUMBS ================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-200/70">
         <div className="flex flex-col gap-1.5">
@@ -260,10 +260,10 @@ export function EmployeeForm({
 
       {/* ================= 2-COLUMN ASYMMETRICAL GRID ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1.2fr] gap-7 items-start">
-        
+
         {/* ================= LEFT COLUMN: PRIMARY PERSONAL & CONTACT DATA ================= */}
         <div className="flex flex-col gap-7">
-          
+
           {/* Section 1: Personal & Identity Information */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200/80 shadow-2xs">
             {/* Section Header */}
@@ -359,9 +359,6 @@ export function EmployeeForm({
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-neutral-900">
                         Employee Profile Photo
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
-                        Cloudinary CDN
                       </span>
                     </div>
                     <p className="text-xs text-neutral-400 mt-0.5">
@@ -750,7 +747,7 @@ export function EmployeeForm({
 
         {/* ================= RIGHT COLUMN: EMPLOYMENT, ROLES & SUBMIT ================= */}
         <div className="flex flex-col gap-7 lg:sticky lg:top-24">
-          
+
           {/* Section 4: Employment & Role Assignment */}
           <div className="bg-white rounded-3xl p-6 sm:p-7 border border-neutral-200/80 shadow-2xs">
             <div className="flex items-center gap-3.5 pb-5 mb-5 border-b border-neutral-100">
@@ -789,11 +786,10 @@ export function EmployeeForm({
                   <label htmlFor="employmentStatus" className="text-xs font-bold text-neutral-700">
                     Status <span className="text-rose-500">*</span>
                   </label>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    statusPreview === "ACTIVE"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                      : "bg-neutral-100 text-neutral-700"
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusPreview === "ACTIVE"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                    : "bg-neutral-100 text-neutral-700"
+                    }`}>
                     {statusPreview}
                   </span>
                 </div>
@@ -956,11 +952,10 @@ export function EmployeeForm({
 
               <div className="flex flex-col gap-4">
                 {/* Checkbox Trigger Card */}
-                <label className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
-                  createLogin
-                    ? "bg-amber-50/50 border-amber-200/90 ring-2 ring-amber-500/10"
-                    : "bg-neutral-50/70 border-neutral-200/80 hover:bg-neutral-100/50"
-                }`}>
+                <label className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${createLogin
+                  ? "bg-amber-50/50 border-amber-200/90 ring-2 ring-amber-500/10"
+                  : "bg-neutral-50/70 border-neutral-200/80 hover:bg-neutral-100/50"
+                  }`}>
                   <div className="pt-0.5">
                     <Checkbox
                       checked={createLogin}
@@ -1035,11 +1030,10 @@ export function EmployeeForm({
                               type="button"
                               onClick={handleCopyPassword}
                               title={isCopied ? "Copied to clipboard!" : "Copy password"}
-                              className={`h-7 px-2 flex items-center gap-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                                isCopied
-                                  ? "bg-emerald-600 text-white shadow-2xs"
-                                  : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100"
-                              }`}
+                              className={`h-7 px-2 flex items-center gap-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${isCopied
+                                ? "bg-emerald-600 text-white shadow-2xs"
+                                : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100"
+                                }`}
                             >
                               {isCopied ? (
                                 <>

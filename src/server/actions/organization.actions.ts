@@ -75,12 +75,20 @@ export async function createShiftAction(
   const gracePeriodMinutes = Number(formData.get("gracePeriodMinutes") ?? 0);
   const breakMinutes = Number(formData.get("breakMinutes") ?? 0);
   const isOvernight = formData.get("isOvernight") === "on";
+  const requiredWorkMinutesRaw = formData.get("requiredWorkMinutes");
+  const requiredWorkMinutes =
+    typeof requiredWorkMinutesRaw === "string" && requiredWorkMinutesRaw.trim() !== ""
+      ? Number(requiredWorkMinutesRaw)
+      : null;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     return { error: "Shift name is required." };
   }
   if (typeof startTime !== "string" || typeof endTime !== "string" || !startTime || !endTime) {
     return { error: "Start and end time are required." };
+  }
+  if (requiredWorkMinutes !== null && (!Number.isFinite(requiredWorkMinutes) || requiredWorkMinutes < 0)) {
+    return { error: "Required work minutes must be a positive number." };
   }
 
   const input: ShiftInput = {
@@ -90,6 +98,7 @@ export async function createShiftAction(
     gracePeriodMinutes: Number.isFinite(gracePeriodMinutes) ? gracePeriodMinutes : 0,
     breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
     isOvernight,
+    requiredWorkMinutes,
   };
 
   await createShift(input);

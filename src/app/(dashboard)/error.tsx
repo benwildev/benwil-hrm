@@ -6,6 +6,13 @@ import { AlertTriangleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+// A small allowlist of errors it's safe to show verbatim — deliberate,
+// human-authored validation messages thrown by DAL/business-logic code
+// (e.g. "You already have a pending leave request that overlaps these
+// dates."). Anything else (a Prisma error, a thrown null-pointer, a
+// database connection failure, ...) must never reach the browser as raw
+// `error.message` — it can carry table/column names or other internals.
+// Those are logged server-side via console.error below instead.
 function friendlyMessage(error: Error) {
   if (error.name === "ForbiddenError" || error.message.startsWith("Missing required permission")) {
     return "You don't have permission to view this page.";
@@ -13,7 +20,10 @@ function friendlyMessage(error: Error) {
   if (error.name === "UnauthenticatedError") {
     return "Your session has expired. Please sign in again.";
   }
-  return error.message || "Something went wrong loading this page.";
+  if (error.name === "Error" && !error.message.includes("Prisma") && !error.message.includes("prisma")) {
+    return error.message || "Something went wrong loading this page.";
+  }
+  return "Something went wrong loading this page. Our team has been notified — please try again.";
 }
 
 export default function DashboardError({

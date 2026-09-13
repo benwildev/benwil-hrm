@@ -89,7 +89,7 @@ export async function aggregateAttendanceForDate(employeeId: string, date: Date)
     if (metrics.isLate) status = "LATE";
   }
 
-  return prisma.attendanceRecord.upsert({
+  const result = await prisma.attendanceRecord.upsert({
     where: { employeeId_attendanceDate: { employeeId, attendanceDate: day } },
     create: {
       employeeId,
@@ -118,4 +118,19 @@ export async function aggregateAttendanceForDate(employeeId: string, date: Date)
       checkOutSource,
     },
   });
+
+  // Mark the raw punches that fed this computation as processed — purely a
+  // troubleshooting/observability signal (e.g. "which raw punches never
+  // made it into any attendance record"). Re-aggregation always recomputes
+  // from every raw punch in the window regardless of this flag, so it is
+  // never used as a gate and re-running this function is still fully
+  // idempotent.
+  if (punches.length > 0) {
+    await prisma.biometricLog.updateMany({
+      where: { id: { in: punches.map((p) => p.id) }, isProcessed: false },
+      data: { isProcessed: true, processedAt: new Date() },
+    });
+  }
+
+  return result;
 }

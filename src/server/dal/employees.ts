@@ -1,20 +1,45 @@
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/server/dal/session";
+import { requirePermission, requireEmployeeAccess } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { cloudinary, isCloudinaryConfigured } from "@/server/storage/cloudinary-client";
+import { logAudit } from "@/server/audit/audit";
+import { assertStrongPassword } from "@/server/auth/password-policy";
 import bcrypt from "bcryptjs";
 
+// Safe company-directory projection. EMPLOYEES_READ/EMPLOYEES_VIEW is granted
+// to every base "Employee" role by default so staff can browse who works
+// where — it must never be treated as "can see everyone's private profile."
+// Only the fields below are safe to hand to any authenticated employee; full
+// profiles (DOB, address, emergency contact, bank details, ...) are only
+// ever returned by getEmployee(), which is ownership-gated.
 export async function listEmployees() {
   await requirePermission(PERMISSIONS.EMPLOYEES_VIEW);
   return prisma.employee.findMany({
     where: { deletedAt: null },
-    include: { department: true, designation: true, user: { select: { email: true } } },
+    select: {
+      id: true,
+      employeeCode: true,
+      fullName: true,
+      profilePhotoUrl: true,
+      workEmail: true,
+      employmentType: true,
+      employmentStatus: true,
+      joiningDate: true,
+      departmentId: true,
+      department: { select: { id: true, name: true } },
+      designationId: true,
+      designation: { select: { id: true, name: true } },
+    },
     orderBy: { fullName: "asc" },
   });
 }
 
 export async function getEmployee(id: string) {
-  await requirePermission(PERMISSIONS.EMPLOYEES_VIEW);
+  // Full profile (personal info, address, emergency contact, documents,
+  // linked login) is only ever available to the employee themself or to
+  // someone holding EMPLOYEES_MANAGE — never to a base "Employee" role
+  // holder looking at someone else's record via a manipulated employeeId.
+  await requireEmployeeAccess(id, PERMISSIONS.EMPLOYEES_MANAGE);
   return prisma.employee.findUniqueOrThrow({
     where: { id },
     include: {
@@ -75,15 +100,16 @@ function toDate(value?: string) {
 }
 
 export async function createEmployee(input: CreateEmployeeInput) {
-  await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
+  const actor = await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     let userId: string | undefined;
 
     if (input.createLogin) {
       if (!input.loginEmail || !input.loginPassword || !input.roleId) {
         throw new Error("Login email, password and role are required to create an account.");
       }
+      assertStrongPassword(input.loginPassword);
       const passwordHash = await bcrypt.hash(input.loginPassword, 12);
       const user = await tx.user.create({
         data: {
@@ -125,11 +151,26 @@ export async function createEmployee(input: CreateEmployeeInput) {
       },
     });
   });
+
+  await logAudit({
+    actorId: actor.id,
+    action: "EMPLOYEE_CREATED",
+    entityType: "Employee",
+    entityId: created.id,
+    newData: { employeeCode: created.employeeCode, fullName: created.fullName },
+  });
+
+  return created;
 }
 
 export async function updateEmployee(id: string, input: EmployeeInput) {
-  await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
-  return prisma.employee.update({
+  const actor = await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
+  const before = await prisma.employee.findUnique({
+    where: { id },
+    select: { fullName: true, employmentStatus: true, departmentId: true, designationId: true, shiftId: true },
+  });
+
+  const updated = await prisma.employee.update({
     where: { id },
     data: {
       employeeCode: input.employeeCode,
@@ -157,6 +198,23 @@ export async function updateEmployee(id: string, input: EmployeeInput) {
       reportingManagerId: input.reportingManagerId || null,
     },
   });
+
+  await logAudit({
+    actorId: actor.id,
+    action: "EMPLOYEE_UPDATED",
+    entityType: "Employee",
+    entityId: id,
+    oldData: before,
+    newData: {
+      fullName: updated.fullName,
+      employmentStatus: updated.employmentStatus,
+      departmentId: updated.departmentId,
+      designationId: updated.designationId,
+      shiftId: updated.shiftId,
+    },
+  });
+
+  return updated;
 }
 
 export async function uploadEmployeePhoto(
@@ -193,8 +251,8 @@ export async function uploadEmployeePhoto(
 }
 
 export async function softDeleteEmployee(id: string) {
-  await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
-  return prisma.$transaction(async (tx) => {
+  const actor = await requirePermission(PERMISSIONS.EMPLOYEES_MANAGE);
+  const result = await prisma.$transaction(async (tx) => {
     const employee = await tx.employee.findUnique({
       where: { id },
       select: { userId: true },
@@ -210,6 +268,15 @@ export async function softDeleteEmployee(id: string) {
       data: { deletedAt: new Date(), employmentStatus: "TERMINATED" },
     });
   });
+
+  await logAudit({
+    actorId: actor.id,
+    action: "EMPLOYEE_DEACTIVATED",
+    entityType: "Employee",
+    entityId: id,
+  });
+
+  return result;
 }
 
 export type EmployeePaymentDetailsInput = {
@@ -223,8 +290,8 @@ export type EmployeePaymentDetailsInput = {
 };
 
 export async function updateEmployeePaymentDetails(id: string, input: EmployeePaymentDetailsInput) {
-  await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
-  return prisma.employee.update({
+  const actor = await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
+  const updated = await prisma.employee.update({
     where: { id },
     data: {
       paymentMethod: input.paymentMethod,
@@ -236,5 +303,18 @@ export async function updateEmployeePaymentDetails(id: string, input: EmployeePa
       mobileBankingNumber: input.mobileBankingNumber ?? null,
     },
   });
+
+  // Deliberately do not record the actual account/routing/wallet numbers in
+  // the audit trail — only that a change happened and which payment method
+  // is now on file.
+  await logAudit({
+    actorId: actor.id,
+    action: "EMPLOYEE_PAYMENT_DETAILS_CHANGED",
+    entityType: "Employee",
+    entityId: id,
+    newData: { paymentMethod: input.paymentMethod },
+  });
+
+  return updated;
 }
 

@@ -58,3 +58,26 @@ export function hasPermission(
 ) {
   return Boolean(user?.permissions.includes(permission));
 }
+
+/**
+ * The single ownership gate for "an employee's own HR data vs. someone
+ * managing it." Every DAL function that takes an `employeeId` and returns
+ * private per-employee data (profile, documents, leave balances, salary,
+ * attendance, payroll) must go through this instead of re-deriving its own
+ * `canViewAll` check — that duplication is exactly how EMPLOYEES_VIEW (a
+ * permission granted to every base "Employee" role, for browsing the
+ * directory) previously got reused as a stand-in for "can see everyone's
+ * private profile," which it must never mean.
+ *
+ * Pass the elevated permission that lets someone see ANY employee's record
+ * for this resource (e.g. EMPLOYEES_MANAGE, PAYROLL_MANAGE, ATTENDANCE_VIEW_ALL).
+ * Without it, the caller may only access their own record.
+ */
+export async function requireEmployeeAccess(employeeId: string, managePermission: PermissionKey) {
+  const user = await requireUser();
+  const canManage = user.permissions.includes(managePermission);
+  if (!canManage && user.employeeId !== employeeId) {
+    throw new ForbiddenError(managePermission);
+  }
+  return user;
+}

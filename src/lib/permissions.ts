@@ -71,13 +71,29 @@ export const PERMISSIONS = {
   REPORTS_READ: "reports:read",
   REPORTS_EXPORT: "reports:export",
 
-  // Backward-compatible alias mappings
+  // Backward-compatible alias mappings.
+  //
+  // IMPORTANT: EMPLOYEES_READ, DOCUMENTS_READ/CREATE, ATTENDANCE_READ/CREATE
+  // and LEAVE_READ/CREATE are granted to every base "Employee" role by
+  // default (see EMPLOYEE_DEFAULT_PERMISSIONS below) so staff can browse the
+  // company directory and manage their own attendance/leave/documents. Any
+  // alias below that is meant to gate "can see/manage OTHER employees'
+  // data" must resolve to a DIFFERENT permission string than those, or the
+  // check silently passes for every employee. EMPLOYEES_VIEW and
+  // DOCUMENTS_MANAGE intentionally still alias the base read/create keys
+  // (they gate the safe company directory and an employee's own document
+  // uploads respectively) — do not use them to gate a full profile, another
+  // employee's documents, or any other cross-employee data; use
+  // EMPLOYEES_MANAGE (or requireEmployeeAccess) for that instead.
   COMPANY_MANAGE: "company:update",
   ROLES_MANAGE: "roles:update",
   EMPLOYEES_MANAGE: "employees:update",
   EMPLOYEES_VIEW: "employees:read",
   DOCUMENTS_MANAGE: "documents:create",
-  ATTENDANCE_VIEW_ALL: "attendance:read",
+  // Deliberately NOT aliased to ATTENDANCE_READ ("attendance:read", a
+  // default Employee permission) — that collision previously let any
+  // employee call the "view every employee's attendance" DAL functions.
+  ATTENDANCE_VIEW_ALL: "attendance:update",
   ATTENDANCE_MANAGE: "attendance:update",
   LEAVE_TYPES_MANAGE: "leave:update",
   PAYROLL_MANAGE: "payroll:update",

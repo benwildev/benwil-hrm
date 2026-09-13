@@ -10,7 +10,6 @@ import {
   CopyIcon,
   CheckIcon,
   MailIcon,
-  PhoneIcon,
   ArrowUpRightIcon,
   PencilIcon,
   PlusIcon,
@@ -39,9 +38,7 @@ export interface EmployeeListItem {
   employeeCode: string;
   fullName: string;
   profilePhotoUrl: string | null;
-  personalEmail: string | null;
   workEmail: string | null;
-  phone: string | null;
   employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN" | null;
   employmentStatus: "ACTIVE" | "ON_LEAVE" | "RESIGNED" | "TERMINATED" | "INACTIVE";
   departmentId: string | null;
@@ -168,9 +165,7 @@ export function EmployeeDirectoryView({
       const q = searchQuery.toLowerCase().trim();
       const nameMatch = employee.fullName.toLowerCase().includes(q);
       const codeMatch = employee.employeeCode.toLowerCase().includes(q);
-      const emailMatch =
-        (employee.workEmail?.toLowerCase().includes(q) ?? false) ||
-        (employee.personalEmail?.toLowerCase().includes(q) ?? false);
+      const emailMatch = employee.workEmail?.toLowerCase().includes(q) ?? false;
       const deptMatch = employee.department?.name.toLowerCase().includes(q) ?? false;
       const desigMatch = employee.designation?.name.toLowerCase().includes(q) ?? false;
 
@@ -512,7 +507,7 @@ export function EmployeeDirectoryView({
                               <ArrowUpRightIcon className="h-3 w-3 opacity-0 -translate-x-1 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all text-primary shrink-0" />
                             </span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                              {employee.workEmail || employee.personalEmail || "No email on record"}
+                              {employee.workEmail || "No work email on record"}
                             </span>
                           </div>
                         </Link>
@@ -729,23 +724,14 @@ export function EmployeeDirectoryView({
 
                   {/* Contact Information */}
                   <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5 text-xs">
-                    {(employee.workEmail || employee.personalEmail) && (
+                    {employee.workEmail && (
                       <a
-                        href={`mailto:${employee.workEmail || employee.personalEmail}`}
+                        href={`mailto:${employee.workEmail}`}
                         className="flex items-center gap-2 text-slate-600 hover:text-primary transition-colors truncate dark:text-slate-400"
-                        title={employee.workEmail || employee.personalEmail || ""}
+                        title={employee.workEmail}
                       >
                         <MailIcon className="size-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{employee.workEmail || employee.personalEmail}</span>
-                      </a>
-                    )}
-                    {employee.phone && (
-                      <a
-                        href={`tel:${employee.phone}`}
-                        className="flex items-center gap-2 text-slate-600 hover:text-primary transition-colors truncate dark:text-slate-400"
-                      >
-                        <PhoneIcon className="size-3.5 text-slate-400 shrink-0" />
-                        <span>{employee.phone}</span>
+                        <span className="truncate">{employee.workEmail}</span>
                       </a>
                     )}
                   </div>

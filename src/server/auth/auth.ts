@@ -1,8 +1,14 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { isLoginRateLimited, recordFailedLogin, clearLoginAttempts } from "@/server/auth/rate-limit";
+import { logAudit } from "@/server/audit/audit";
+
+export class RateLimitedSignInError extends CredentialsSignin {
+  code = "rate_limited";
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -14,11 +20,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (credentials) => {
+      authorize: async (credentials, request) => {
         const email = credentials?.email;
         const password = credentials?.password;
         if (typeof email !== "string" || typeof password !== "string") {
           return null;
+        }
+
+        const ip = request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim()
+          ?? request?.headers?.get("x-real-ip")
+          ?? null;
+
+        if (isLoginRateLimited(email, ip)) {
+          throw new RateLimitedSignInError();
         }
 
         const user = await prisma.user.findUnique({
@@ -30,18 +44,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
 
         if (!user || user.status !== "ACTIVE") {
+          recordFailedLogin(email, ip);
           return null;
         }
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) {
+          recordFailedLogin(email, ip);
+          await logAudit({ actorId: user.id, action: "LOGIN_FAILED", entityType: "User", entityId: user.id });
           return null;
         }
+
+        clearLoginAttempts(email, ip);
 
         await prisma.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
         });
+        await logAudit({ actorId: user.id, action: "LOGIN_SUCCEEDED", entityType: "User", entityId: user.id });
 
         return {
           id: user.id,

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseAttLog } from "@/server/integrations/adms/parse";
 import { ingestPunches } from "@/server/attendance/ingest";
+import { verifyDeviceRequest } from "@/server/integrations/adms/device-auth";
 
 // Endpoint a ZKTeco-style biometric terminal is pointed at (server address
 // configured on the device itself, fixed path "/iclock/cdata"). See
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
   if (!device) {
     return new Response("Unregistered device", { status: 401 });
   }
+  const auth = verifyDeviceRequest(device, request);
+  if (!auth.ok) {
+    return new Response("Unauthorized device", { status: 401 });
+  }
 
   await prisma.biometricDevice.update({ where: { id: device.id }, data: { lastSyncAt: new Date() } });
 
@@ -41,6 +46,10 @@ export async function POST(request: Request) {
 
   if (!device) {
     return new Response("Unregistered device", { status: 401 });
+  }
+  const auth = verifyDeviceRequest(device, request);
+  if (!auth.ok) {
+    return new Response("Unauthorized device", { status: 401 });
   }
 
   if (table && table !== "ATTLOG") {

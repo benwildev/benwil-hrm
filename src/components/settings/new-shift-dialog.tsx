@@ -70,6 +70,22 @@ export function NewShiftDialog() {
             </div>
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="requiredWorkMinutes">Required work minutes (optional)</Label>
+            <Input
+              id="requiredWorkMinutes"
+              name="requiredWorkMinutes"
+              type="number"
+              min={0}
+              placeholder="e.g. 520 for 8h40m"
+            />
+            <p className="text-xs text-muted-foreground">
+              When set, lateness is judged by total hours worked vs. this target (an employee who
+              arrives late but stays late enough to still hit this total is on time), instead of
+              by arrival time alone.
+            </p>
+          </div>
+
           <label className="flex items-center gap-2">
             <Checkbox
               checked={overnight}

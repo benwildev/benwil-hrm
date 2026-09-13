@@ -7,17 +7,16 @@ export async function GET() {
   try {
     const employees = await listEmployees();
 
-    // Flatten department/designation names into the export, since they're
-    // nested relations on the DAL result, not top-level fields.
+    // Mirrors the same safe directory projection shown on-screen — this
+    // export must never carry more than the directory itself exposes (no
+    // phone/personal email/login email/bank details).
     const rows = employees.map((e) => ({
       employeeCode: e.employeeCode,
       fullName: e.fullName,
       department: e.department?.name ?? "",
       designation: e.designation?.name ?? "",
       workEmail: e.workEmail ?? "",
-      phone: e.phone ?? "",
       status: e.employmentStatus,
-      loginEmail: e.user?.email ?? "",
     }));
     const csv = toCsv(rows, [
       { key: "employeeCode", header: "Employee Code" },
@@ -25,9 +24,7 @@ export async function GET() {
       { key: "department", header: "Department" },
       { key: "designation", header: "Designation" },
       { key: "workEmail", header: "Work Email" },
-      { key: "phone", header: "Phone" },
       { key: "status", header: "Status" },
-      { key: "loginEmail", header: "Login Email" },
     ]);
 
     return new NextResponse(csv, {

@@ -23,7 +23,7 @@ export async function getLiveNotifications(): Promise<LiveNotificationItem[]> {
   const today = startOfUtcDay(nowAsUtcNominal());
 
   const canApproveLeave = user.permissions.includes(PERMISSIONS.LEAVE_APPROVE);
-  const canViewAttendance = user.permissions.includes(PERMISSIONS.EMPLOYEES_VIEW);
+  const canViewAttendance = user.permissions.includes(PERMISSIONS.ATTENDANCE_VIEW_ALL);
   const canRunPayroll = user.permissions.includes(PERMISSIONS.PAYROLL_RUN);
 
   // 1. Leave approvals for managers / admins

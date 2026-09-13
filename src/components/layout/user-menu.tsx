@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LogOutIcon, UserIcon } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,19 +29,19 @@ export function UserMenu({
 }: {
   name: string;
   email: string;
-  roleName: string;
+  roleName?: string;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <SidebarMenuButton size="lg">
-            <Avatar className="size-6">
-              <AvatarFallback>{initials(name)}</AvatarFallback>
+          <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
+            <Avatar className="size-8 rounded-lg">
+              <AvatarFallback className="rounded-lg">{initials(name)}</AvatarFallback>
             </Avatar>
-            <div className="flex flex-1 flex-col text-left leading-tight">
-              <span className="truncate text-sm font-medium">{name}</span>
-              <span className="truncate text-xs text-muted-foreground">{roleName}</span>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">{name}</span>
+              <span className="truncate text-xs text-muted-foreground">{email}</span>
             </div>
           </SidebarMenuButton>
         }
@@ -53,7 +54,7 @@ export function UserMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<a href="/profile" />}>
+        <DropdownMenuItem render={<Link href="/profile" />}>
           <UserIcon />
           My profile
         </DropdownMenuItem>

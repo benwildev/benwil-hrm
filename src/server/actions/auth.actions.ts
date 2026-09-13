@@ -21,6 +21,9 @@ export async function loginAction(
     });
   } catch (error) {
     if (error instanceof AuthError) {
+      if (error.type === "CredentialsSignin" && (error as { code?: string }).code === "rate_limited") {
+        return { error: "Too many failed sign-in attempts. Please try again in a few minutes." };
+      }
       return { error: "Invalid email or password." };
     }
     throw error;

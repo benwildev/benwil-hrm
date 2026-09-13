@@ -408,57 +408,64 @@ export default async function EmployeeDetailPage({
 
             {/* System Portal Access */}
             <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-xs">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <KeyIcon className="h-4 w-4" />
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <KeyIcon className="h-4 w-4" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    System Portal Access
+                  </h2>
                 </div>
-                <h2 className="text-sm font-semibold text-foreground">
-                  System Portal Access
-                </h2>
+                {employee.user ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Active Login
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground shrink-0">
+                    No Access
+                  </span>
+                )}
               </div>
               <div>
                 {employee.user ? (
-                  <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                         <KeyIcon className="h-4 w-4" />
                       </div>
-                      <div>
-                        <span className="text-sm font-semibold text-foreground block">
+                      <div className="min-w-0">
+                        <span className="text-sm font-semibold text-foreground block truncate" title={employee.user.email}>
                           {employee.user.email}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          Role: {employee.user.role.name}
+                          Role: <span className="font-medium text-foreground">{employee.user.role.name}</span>
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {canManage && (
-                        <>
-                          <ChangeRoleDialog
-                            userId={employee.user.id}
-                            employeeId={employee.id}
-                            employeeName={employee.fullName}
-                            userEmail={employee.user.email}
-                            currentRoleId={employee.user.roleId}
-                            currentRoleName={employee.user.role.name}
-                            roles={roles}
-                          />
-                          <ChangePasswordDialog
-                            userId={employee.user.id}
-                            employeeId={employee.id}
-                            employeeName={employee.fullName}
-                            userEmail={employee.user.email}
-                          />
-                        </>
-                      )}
-                      <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                        Active Login
-                      </span>
-                    </div>
+                    {canManage && (
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <ChangeRoleDialog
+                          userId={employee.user.id}
+                          employeeId={employee.id}
+                          employeeName={employee.fullName}
+                          userEmail={employee.user.email}
+                          currentRoleId={employee.user.roleId}
+                          currentRoleName={employee.user.role.name}
+                          roles={roles}
+                        />
+                        <ChangePasswordDialog
+                          userId={employee.user.id}
+                          employeeId={employee.id}
+                          employeeName={employee.fullName}
+                          userEmail={employee.user.email}
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 p-3.5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border/60 bg-muted/30 p-3.5">
                     <span className="text-sm text-muted-foreground">
                       No system portal login configured for this employee.
                     </span>

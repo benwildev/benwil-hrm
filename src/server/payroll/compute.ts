@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type Company } from "@/generated/prisma/client";
 import { isWeekend, getHolidayChecker, getCompanyWeekendDays } from "@/server/attendance/calendar";
 
 function eachDay(start: Date, end: Date): Date[] {
@@ -12,12 +12,28 @@ function eachDay(start: Date, end: Date): Date[] {
 
 // Working days in the period = every day that isn't a weekend or company
 // holiday.
-async function countWorkingDays(startDate: Date, endDate: Date) {
-  const [isHoliday, weekendDays] = await Promise.all([
+function countWorkingDays(startDate: Date, endDate: Date, isHoliday: (d: Date) => boolean, weekendDays: number[]) {
+  return eachDay(startDate, endDate).filter((d) => !isWeekend(d, weekendDays) && !isHoliday(d)).length;
+}
+
+// Company settings, the holiday calendar, and weekend-day config are the
+// same for every employee in a payroll run — fetching them once and
+// threading them through, instead of re-querying per employee, cuts a
+// payroll run over N employees from ~3N queries for this shared data down
+// to 3 total.
+export type PayrollSharedContext = {
+  company: Company | null;
+  isHoliday: (day: Date) => boolean;
+  weekendDays: number[];
+};
+
+export async function loadPayrollSharedContext(): Promise<PayrollSharedContext> {
+  const [company, isHoliday, weekendDays] = await Promise.all([
+    prisma.company.findUnique({ where: { id: "singleton" } }),
     getHolidayChecker(),
     getCompanyWeekendDays(),
   ]);
-  return eachDay(startDate, endDate).filter((d) => !isWeekend(d, weekendDays) && !isHoliday(d)).length;
+  return { company, isHoliday, weekendDays };
 }
 
 export type PayslipBreakdown = {
@@ -44,8 +60,12 @@ export async function computeEmployeePayslip(
   employeeId: string,
   periodStart: Date,
   periodEnd: Date,
+  shared?: PayrollSharedContext,
 ): Promise<PayslipBreakdown | null> {
-  const [salary, employee, company] = await Promise.all([
+  const ctx = shared ?? (await loadPayrollSharedContext());
+  const { company, isHoliday, weekendDays } = ctx;
+
+  const [salary, employee] = await Promise.all([
     prisma.employeeSalary.findFirst({
       where: {
         employeeId,
@@ -58,18 +78,11 @@ export async function computeEmployeePayslip(
       where: { id: employeeId },
       select: { joiningDate: true, resignationDate: true, terminationDate: true },
     }),
-    prisma.company.findUnique({
-      where: { id: "singleton" },
-    }),
   ]);
 
   if (!salary) return null;
 
-  const [workingDays, isHoliday, weekendDays] = await Promise.all([
-    countWorkingDays(periodStart, periodEnd),
-    getHolidayChecker(),
-    getCompanyWeekendDays(),
-  ]);
+  const workingDays = countWorkingDays(periodStart, periodEnd, isHoliday, weekendDays);
 
   const records = await prisma.attendanceRecord.findMany({
     where: { employeeId, attendanceDate: { gte: periodStart, lte: periodEnd } },

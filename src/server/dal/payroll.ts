@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { requirePermission, requireUser, ForbiddenError } from "@/server/dal/session";
+import { requirePermission, requireUser, requireEmployeeAccess, ForbiddenError } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
-import { computeEmployeePayslip } from "@/server/payroll/compute";
+import { computeEmployeePayslip, loadPayrollSharedContext } from "@/server/payroll/compute";
+import { logAudit } from "@/server/audit/audit";
 
 export async function listPayrollPeriods() {
   const user = await requireUser();
@@ -52,7 +53,6 @@ export async function getPayrollPeriod(id: string) {
 }
 
 export async function getPayrollRecord(id: string) {
-  const user = await requireUser();
   const record = await prisma.payrollRecord.findUniqueOrThrow({
     where: { id },
     include: {
@@ -68,12 +68,7 @@ export async function getPayrollRecord(id: string) {
     },
   });
 
-  const canViewAll =
-    user.roleName === "Admin" ||
-    (user.roleName !== "Employee" && user.permissions.includes(PERMISSIONS.PAYROLL_VIEW_ALL));
-  if (!canViewAll && user.employeeId !== record.employeeId) {
-    throw new Error("Not authorized to view this payslip.");
-  }
+  await requireEmployeeAccess(record.employeeId, PERMISSIONS.PAYROLL_VIEW_ALL);
 
   return record;
 }
@@ -142,17 +137,21 @@ export async function runPayrollPeriod(periodId: string) {
     select: { id: true },
   });
 
-  // Pre-calculate payslips so computation errors happen before database mutations
+  // Pre-calculate payslips so computation errors happen before database
+  // mutations. Company settings/holiday calendar/weekend config are the
+  // same for every employee in this run, so they're loaded once up front
+  // rather than being re-fetched inside computeEmployeePayslip for each one.
+  const sharedContext = await loadPayrollSharedContext();
   const computedList: { employeeId: string; breakdown: NonNullable<Awaited<ReturnType<typeof computeEmployeePayslip>>> }[] = [];
   for (const employee of employees) {
-    const breakdown = await computeEmployeePayslip(employee.id, period.startDate, period.endDate);
+    const breakdown = await computeEmployeePayslip(employee.id, period.startDate, period.endDate, sharedContext);
     if (breakdown) {
       computedList.push({ employeeId: employee.id, breakdown });
     }
   }
 
   // Execute deletion, inserts, and status update atomically in a single transaction
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       await tx.payrollPeriod.update({ where: { id: periodId }, data: { status: "PROCESSING" } });
       await tx.payrollRecord.deleteMany({ where: { payrollPeriodId: periodId } });
@@ -226,19 +225,53 @@ export async function runPayrollPeriod(periodId: string) {
     },
     { timeout: 60000, maxWait: 10000 },
   );
+
+  await logAudit({
+    actorId: user.id,
+    action: "PAYROLL_RUN",
+    entityType: "PayrollPeriod",
+    entityId: periodId,
+    newData: { year: period.year, month: period.month, recordCount: computedList.length },
+  });
+
+  return result;
 }
 
 export async function lockPayrollPeriod(periodId: string) {
-  await requirePermission(PERMISSIONS.PAYROLL_RUN);
-  return prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: "LOCKED" } });
+  const user = await requirePermission(PERMISSIONS.PAYROLL_RUN);
+  const result = await prisma.payrollPeriod.update({ where: { id: periodId }, data: { status: "LOCKED" } });
+  await logAudit({
+    actorId: user.id,
+    action: "PAYROLL_LOCKED",
+    entityType: "PayrollPeriod",
+    entityId: periodId,
+  });
+  return result;
 }
 
 export async function markPayslipPaid(recordId: string) {
-  await requirePermission(PERMISSIONS.PAYROLL_RUN);
-  return prisma.payrollRecord.update({
+  const user = await requirePermission(PERMISSIONS.PAYROLL_RUN);
+  const record = await prisma.payrollRecord.findUniqueOrThrow({
+    where: { id: recordId },
+    include: { payrollPeriod: true },
+  });
+  if (record.payrollPeriod.status === "LOCKED") {
+    throw new Error("Cannot modify records in a locked payroll period.");
+  }
+
+  const updated = await prisma.payrollRecord.update({
     where: { id: recordId },
     data: { paymentStatus: "PAID", paidAt: new Date() },
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "PAYSLIP_MARKED_PAID",
+    entityType: "PayrollRecord",
+    entityId: recordId,
+  });
+
+  return updated;
 }
 
 export type DisbursePayslipInput = {
@@ -250,7 +283,15 @@ export type DisbursePayslipInput = {
 
 export async function disbursePayslip(recordId: string, input: DisbursePayslipInput) {
   const user = await requirePermission(PERMISSIONS.PAYROLL_RUN);
-  return prisma.payrollRecord.update({
+  const record = await prisma.payrollRecord.findUniqueOrThrow({
+    where: { id: recordId },
+    include: { payrollPeriod: true },
+  });
+  if (record.payrollPeriod.status === "LOCKED") {
+    throw new Error("Cannot disburse payment for a locked payroll period.");
+  }
+
+  const updated = await prisma.payrollRecord.update({
     where: { id: recordId },
     data: {
       paymentStatus: "PAID",
@@ -261,10 +302,20 @@ export async function disbursePayslip(recordId: string, input: DisbursePayslipIn
       disbursedById: user.id,
     },
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "PAYROLL_DISBURSED",
+    entityType: "PayrollRecord",
+    entityId: recordId,
+    newData: { paymentMethod: input.paymentMethod, paymentReference: input.paymentReference },
+  });
+
+  return updated;
 }
 
 export async function resetPayslipPaymentStatus(recordId: string) {
-  await requirePermission(PERMISSIONS.PAYROLL_RUN);
+  const user = await requirePermission(PERMISSIONS.PAYROLL_RUN);
   const record = await prisma.payrollRecord.findUniqueOrThrow({
     where: { id: recordId },
     include: { payrollPeriod: true },
@@ -274,7 +325,7 @@ export async function resetPayslipPaymentStatus(recordId: string) {
     throw new Error("Cannot modify records in a locked payroll period.");
   }
 
-  return prisma.payrollRecord.update({
+  const updated = await prisma.payrollRecord.update({
     where: { id: recordId },
     data: {
       paymentStatus: "PENDING",
@@ -284,6 +335,16 @@ export async function resetPayslipPaymentStatus(recordId: string) {
       disbursedById: null,
     },
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "PAYROLL_PAYMENT_STATUS_RESET",
+    entityType: "PayrollRecord",
+    entityId: recordId,
+    oldData: { paymentStatus: record.paymentStatus },
+  });
+
+  return updated;
 }
 
 export type AdjustPayslipInput = {
@@ -297,7 +358,7 @@ export type AdjustPayslipInput = {
 };
 
 export async function adjustPayslip(recordId: string, input: AdjustPayslipInput) {
-  await requirePermission(PERMISSIONS.PAYROLL_RUN);
+  const user = await requirePermission(PERMISSIONS.PAYROLL_RUN);
   const record = await prisma.payrollRecord.findUniqueOrThrow({
     where: { id: recordId },
     include: { items: true, payrollPeriod: true },
@@ -306,8 +367,13 @@ export async function adjustPayslip(recordId: string, input: AdjustPayslipInput)
   if (record.payrollPeriod.status === "LOCKED") {
     throw new Error("Cannot adjust a finalized and locked payroll period.");
   }
+  if (record.paymentStatus === "PAID") {
+    throw new Error(
+      "This payslip has already been paid and its amounts can no longer be adjusted. Reset its payment status first if this was a mistake.",
+    );
+  }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // 1. Override absence deduction if specified
     if (input.absenceDeduction !== undefined) {
       const existingAbsence = record.items.find((i) => i.name === "Absence Deduction");
@@ -413,4 +479,15 @@ export async function adjustPayslip(recordId: string, input: AdjustPayslipInput)
       },
     });
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "PAYSLIP_ADJUSTED",
+    entityType: "PayrollRecord",
+    entityId: recordId,
+    oldData: { totalEarnings: record.totalEarnings, totalDeductions: record.totalDeductions, netSalary: record.netSalary },
+    newData: { totalEarnings: result.totalEarnings, totalDeductions: result.totalDeductions, netSalary: result.netSalary, adjustmentNote: input.adjustmentNote },
+  });
+
+  return result;
 }

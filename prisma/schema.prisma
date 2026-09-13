@@ -349,6 +349,11 @@ model BiometricDevice {
   deviceType       String?   @map("device_type")
   deviceIdentifier String    @unique @map("device_identifier")
   ipAddress        String?   @map("ip_address")
+  // Opaque shared secret the device (or an on-prem relay in front of it) must
+  // present via a `key`/`apikey` query param on every push. Optional so an
+  // admin can still fall back to IP allowlisting alone for hardware that
+  // can't be configured with a custom query param — see /api/iclock/*.
+  apiKey           String?   @unique @map("api_key")
   locationName     String?   @map("location_name")
   status           String    @default("active")
   lastSyncAt       DateTime? @map("last_sync_at")
@@ -439,6 +444,7 @@ model AttendanceRecord {
   @@index([attendanceDate])
   @@index([status, attendanceDate])
   @@index([shiftId])
+  @@index([checkIn])
   @@map("attendance_records")
 }
 

@@ -43,6 +43,7 @@ export default async function ShiftsPage() {
             <TableHead>Hours</TableHead>
             <TableHead>Grace</TableHead>
             <TableHead>Break</TableHead>
+            <TableHead>Required work</TableHead>
             <TableHead className="w-1" />
           </TableRow>
         </TableHeader>
@@ -60,6 +61,11 @@ export default async function ShiftsPage() {
               </TableCell>
               <TableCell>{shift.gracePeriodMinutes} min</TableCell>
               <TableCell>{shift.breakMinutes} min</TableCell>
+              <TableCell>
+                {shift.requiredWorkMinutes
+                  ? `${Math.floor(shift.requiredWorkMinutes / 60)}h${String(shift.requiredWorkMinutes % 60).padStart(2, "0")}m`
+                  : <span className="text-muted-foreground">— (arrival-based)</span>}
+              </TableCell>
               <TableCell>
                 <DeleteShiftButton id={shift.id} name={shift.name} />
               </TableCell>

@@ -1,13 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { requirePermission, requireUser } from "@/server/dal/session";
+import { requireEmployeeAccess } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
+import { logAudit } from "@/server/audit/audit";
 
 export async function listSalaryHistory(employeeId: string) {
-  const user = await requireUser();
-  const canViewAll = user.permissions.includes(PERMISSIONS.PAYROLL_MANAGE);
-  if (!canViewAll && user.employeeId !== employeeId) {
-    throw new Error("Not authorized to view this employee's salary.");
-  }
+  await requireEmployeeAccess(employeeId, PERMISSIONS.PAYROLL_MANAGE);
   return prisma.employeeSalary.findMany({
     where: { employeeId },
     orderBy: { effectiveFrom: "desc" },
@@ -26,19 +23,25 @@ export async function setEmployeeSalary(input: {
   basicSalary: number;
   effectiveFrom: string;
 }) {
-  await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
+  const user = await requireEmployeeAccess(input.employeeId, PERMISSIONS.PAYROLL_MANAGE);
+  if (!(input.basicSalary >= 0)) {
+    throw new Error("Basic salary cannot be negative.");
+  }
   const effectiveFrom = new Date(`${input.effectiveFrom}T00:00:00.000Z`);
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     // Close out any currently-open salary record the day before the new one starts.
     const current = await tx.employeeSalary.findFirst({
       where: { employeeId: input.employeeId, effectiveTo: null },
     });
     if (current) {
       const effectiveTo = new Date(effectiveFrom.getTime() - 24 * 60 * 60 * 1000);
-      if (effectiveTo.getTime() >= current.effectiveFrom.getTime()) {
-        await tx.employeeSalary.update({ where: { id: current.id }, data: { effectiveTo } });
+      if (effectiveTo.getTime() < current.effectiveFrom.getTime()) {
+        throw new Error(
+          "The new salary's effective date must be after the current salary record's effective date.",
+        );
       }
+      await tx.employeeSalary.update({ where: { id: current.id }, data: { effectiveTo } });
     }
 
     return tx.employeeSalary.create({
@@ -49,4 +52,14 @@ export async function setEmployeeSalary(input: {
       },
     });
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "SALARY_CHANGED",
+    entityType: "EmployeeSalary",
+    entityId: created.id,
+    newData: { employeeId: input.employeeId, basicSalary: input.basicSalary, effectiveFrom },
+  });
+
+  return created;
 }

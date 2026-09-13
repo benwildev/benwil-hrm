@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { requirePermission, requireUser } from "@/server/dal/session";
+import { requirePermission, requireUser, requireEmployeeAccess } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
+import { logAudit } from "@/server/audit/audit";
 import { aggregateAttendanceForDate } from "@/server/attendance/aggregate";
 import { ingestPunches } from "@/server/attendance/ingest";
 import { parsePunchCsv } from "@/server/attendance/csv";
@@ -31,20 +32,7 @@ export async function listAttendanceForDate(date: Date) {
 }
 
 export async function listAttendanceForEmployee(employeeId: string, year: number, month: number) {
-  const user = await requireUser();
-  const canViewAll = user.permissions.includes(PERMISSIONS.ATTENDANCE_VIEW_ALL);
-  let effectiveEmployeeId = user.employeeId;
-  if (!effectiveEmployeeId && user.id) {
-    const emp = await prisma.employee.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
-    effectiveEmployeeId = emp?.id ?? null;
-  }
-
-  if (!canViewAll && effectiveEmployeeId !== employeeId) {
-    throw new Error("Not authorized to view this employee's attendance.");
-  }
+  await requireEmployeeAccess(employeeId, PERMISSIONS.ATTENDANCE_VIEW_ALL);
 
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 1));
@@ -83,6 +71,15 @@ export async function setManualAttendance(input: ManualAttendanceInput) {
     }),
     prisma.employee.findUniqueOrThrow({ where: { id: input.employeeId }, include: { shift: true } }),
   ]);
+
+  // A same-day checkout before check-in is only ever legitimate for an
+  // overnight shift (where the "next day" checkout is intentionally
+  // combined onto the shift's start date by combineDateTime's caller) —
+  // for any other shift it's almost certainly a data-entry mistake, so
+  // reject it here rather than silently storing negative work minutes.
+  if (newCheckIn && newCheckOut && newCheckOut.getTime() < newCheckIn.getTime() && !employee.shift?.isOvernight) {
+    throw new Error("Check-out time cannot be before check-in time for a non-overnight shift.");
+  }
 
   // The admin's chosen status always wins, but the derived minute counters
   // must reflect the corrected times too — otherwise they'd stay stuck at
@@ -132,6 +129,15 @@ export async function setManualAttendance(input: ManualAttendanceInput) {
       reason: input.reason,
       adjustedById: user.id,
     },
+  });
+
+  await logAudit({
+    actorId: user.id,
+    action: "ATTENDANCE_MANUALLY_ADJUSTED",
+    entityType: "AttendanceRecord",
+    entityId: record.id,
+    oldData: { checkIn: existing?.checkIn ?? null, checkOut: existing?.checkOut ?? null, status: existing?.status ?? null },
+    newData: { checkIn: newCheckIn, checkOut: newCheckOut, status: input.status, reason: input.reason },
   });
 
   return record;

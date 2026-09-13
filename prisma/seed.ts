@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PERMISSION_DEFINITIONS } from "../src/lib/permissions";
+import { seedDefaultShifts } from "./default-shifts";
 
 const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -49,6 +50,9 @@ async function main() {
     skipDuplicates: true,
   });
 
+  console.log("Seeding default shifts...");
+  await seedDefaultShifts(prisma);
+
   console.log("Seeding company profile...");
   await prisma.company.upsert({
     where: { id: "singleton" },
@@ -69,7 +73,11 @@ async function main() {
 
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail.toLowerCase() },
-    update: {},
+    update: {
+      roleId: adminRole.id,
+      status: "ACTIVE",
+      passwordHash,
+    },
     create: {
       email: adminEmail.toLowerCase(),
       passwordHash,
@@ -78,8 +86,28 @@ async function main() {
     },
   });
 
-  const existingEmployee = await prisma.employee.findUnique({ where: { userId: adminUser.id } });
-  if (!existingEmployee) {
+  const existingEmployee =
+    (await prisma.employee.findUnique({ where: { userId: adminUser.id } })) ??
+    (await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { workEmail: adminUser.email },
+          { employeeCode: "EMP-0001" },
+        ],
+      },
+    }));
+
+  if (existingEmployee) {
+    await prisma.employee.update({
+      where: { id: existingEmployee.id },
+      data: {
+        userId: adminUser.id,
+        fullName: fullName || existingEmployee.fullName,
+        workEmail: adminUser.email,
+        employmentStatus: "ACTIVE",
+      },
+    });
+  } else {
     await prisma.employee.create({
       data: {
         employeeCode: "EMP-0001",

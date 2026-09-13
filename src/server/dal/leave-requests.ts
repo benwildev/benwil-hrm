@@ -3,6 +3,7 @@ import { requirePermission, requireUser } from "@/server/dal/session";
 import { PERMISSIONS } from "@/lib/permissions";
 import { adjustUsedDays } from "@/server/dal/leave-balances";
 import { isWeekend, getHolidayChecker, getCompanyWeekendDays } from "@/server/attendance/calendar";
+import { logAudit } from "@/server/audit/audit";
 
 function toUtcDate(dateStr: string) {
   return new Date(`${dateStr}T00:00:00.000Z`);
@@ -89,7 +90,26 @@ export async function applyForLeave(input: {
     throw new Error("The selected date range only includes weekends or official company holidays.");
   }
 
-  return prisma.leaveRequest.create({
+  // Reject overlapping requests up front — an employee submitting a second
+  // request over dates already covered by a pending or approved request
+  // (accidental double-submit, or an attempt to stack two requests over the
+  // same days) must be rejected server-side, not just discouraged by a
+  // disabled submit button.
+  const overlapping = await prisma.leaveRequest.findFirst({
+    where: {
+      employeeId: user.employeeId,
+      status: { in: ["PENDING", "APPROVED"] },
+      startDate: { lte: endDate },
+      endDate: { gte: startDate },
+    },
+  });
+  if (overlapping) {
+    throw new Error(
+      "You already have a pending or approved leave request that overlaps these dates.",
+    );
+  }
+
+  const created = await prisma.leaveRequest.create({
     data: {
       employeeId: user.employeeId,
       leaveTypeId: input.leaveTypeId,
@@ -102,6 +122,16 @@ export async function applyForLeave(input: {
       status: "PENDING",
     },
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "LEAVE_SUBMITTED",
+    entityType: "LeaveRequest",
+    entityId: created.id,
+    newData: { employeeId: user.employeeId, leaveTypeId: input.leaveTypeId, startDate, endDate, totalDays },
+  });
+
+  return created;
 }
 
 export async function cancelLeaveRequest(requestId: string) {
@@ -117,7 +147,7 @@ export async function cancelLeaveRequest(requestId: string) {
     return request;
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     if (request.status === "APPROVED") {
       await adjustUsedDays(
         tx,
@@ -138,6 +168,17 @@ export async function cancelLeaveRequest(requestId: string) {
 
     return tx.leaveRequest.update({ where: { id: requestId }, data: { status: "CANCELLED" } });
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: "LEAVE_CANCELLED",
+    entityType: "LeaveRequest",
+    entityId: requestId,
+    oldData: { status: request.status },
+    newData: { status: "CANCELLED" },
+  });
+
+  return updated;
 }
 
 export async function reviewLeaveRequest(
@@ -152,7 +193,7 @@ export async function reviewLeaveRequest(
     throw new Error("Only pending requests can be reviewed.");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.leaveRequest.update({
       where: { id: requestId },
       data: {
@@ -209,4 +250,15 @@ export async function reviewLeaveRequest(
 
     return updated;
   });
+
+  await logAudit({
+    actorId: user.id,
+    action: decision === "APPROVED" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+    entityType: "LeaveRequest",
+    entityId: requestId,
+    oldData: { status: "PENDING" },
+    newData: { status: decision, reviewNote },
+  });
+
+  return result;
 }

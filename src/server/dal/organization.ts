@@ -49,6 +49,7 @@ export type ShiftInput = {
   gracePeriodMinutes: number;
   breakMinutes: number;
   isOvernight: boolean;
+  requiredWorkMinutes?: number | null;
 };
 
 function toTimeDate(hhmm: string) {
@@ -66,6 +67,7 @@ export async function createShift(input: ShiftInput) {
       gracePeriodMinutes: input.gracePeriodMinutes,
       breakMinutes: input.breakMinutes,
       isOvernight: input.isOvernight,
+      requiredWorkMinutes: input.requiredWorkMinutes ?? null,
     },
   });
 }
