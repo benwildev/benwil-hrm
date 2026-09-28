@@ -1,9 +1,43 @@
-<!-- BEGIN:nextjs-agent-rules -->
+@AGENTS.md
+# HRM PROJECT RULES
 
-# This is NOT the Next.js you know
+## Product
+Modern single-company HRM system.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+## Design
+Premium B2B SaaS.
+Minimal.
+Professional.
+Accessible.
+Responsive.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+## UI
+Use reusable components.
+Never duplicate UI patterns.
+Never create unnecessary cards.
+Use consistent spacing.
+Use consistent typography.
+Use semantic colors.
 
-<!-- END:nextjs-agent-rules -->
+## UX
+Prioritize simplicity.
+Admin should require minimal training.
+Employees should see only relevant information.
+
+## Architecture
+Use modular feature architecture.
+Keep business logic separate from UI.
+Use server-side validation.
+Use role-based authorization.
+
+## Important
+Never modify unrelated features.
+Before changing an existing component, inspect it.
+Do not create duplicate components.
+Do not introduce unnecessary dependencies.
+Do not over-engineer.
+
+## Development
+Implement one feature at a time.
+Test after each feature.
+Do not proceed to another module until the current module works.
