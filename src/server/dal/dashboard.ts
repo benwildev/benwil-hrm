@@ -39,6 +39,7 @@ export async function getCompanyDashboard() {
 
   const now = nowAsUtcNominal();
   const today = startOfUtcDay(now);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
   const [
     employeeCount,
@@ -56,14 +57,20 @@ export async function getCompanyDashboard() {
       where: { year: today.getUTCFullYear(), month: today.getUTCMonth() + 1 },
     }),
     prisma.biometricLog.findMany({
-      take: 6,
+      where: {
+        punchTime: { gte: today, lt: tomorrow },
+      },
+      take: 10,
       orderBy: { punchTime: "desc" },
       include: {
         employee: { select: { fullName: true, employeeCode: true, profilePhotoUrl: true } },
       },
     }),
     prisma.leaveRequest.findMany({
-      take: 5,
+      where: {
+        createdAt: { gte: today, lt: tomorrow },
+      },
+      take: 10,
       orderBy: { createdAt: "desc" },
       include: {
         employee: { select: { fullName: true, employeeCode: true, profilePhotoUrl: true } },
@@ -71,9 +78,15 @@ export async function getCompanyDashboard() {
       },
     }),
     prisma.attendanceRecord.findMany({
-      where: { checkIn: { not: null } },
-      take: 6,
-      orderBy: { checkIn: "desc" },
+      where: {
+        attendanceDate: today,
+        OR: [
+          { checkIn: { not: null } },
+          { checkOut: { not: null } },
+        ],
+      },
+      take: 10,
+      orderBy: { updatedAt: "desc" },
       include: {
         employee: { select: { fullName: true, employeeCode: true, profilePhotoUrl: true } },
       },
@@ -159,7 +172,7 @@ export async function getCompanyDashboard() {
   for (const a of recentAttendance) {
     if (a.checkIn) {
       activities.push({
-        id: `att-${a.id}`,
+        id: `att-in-${a.id}`,
         type: "ATTENDANCE",
         title: a.employee.fullName,
         description: a.status === "LATE" ? `Clocked in late (${a.lateMinutes}m)` : "Clocked in on schedule",
@@ -170,6 +183,21 @@ export async function getCompanyDashboard() {
         employeePhoto: a.employee.profilePhotoUrl,
         badgeText: a.status === "LATE" ? "Late Check-in" : "Check-in",
         badgeVariant: a.status === "LATE" ? "amber" : "emerald",
+      });
+    }
+    if (a.checkOut) {
+      activities.push({
+        id: `att-out-${a.id}`,
+        type: "ATTENDANCE",
+        title: a.employee.fullName,
+        description: "Clocked out",
+        timestamp: a.checkOut.toISOString(),
+        timeFormatted: formatTime(a.checkOut),
+        employeeName: a.employee.fullName,
+        employeeCode: a.employee.employeeCode,
+        employeePhoto: a.employee.profilePhotoUrl,
+        badgeText: "Check-out",
+        badgeVariant: "blue",
       });
     }
   }

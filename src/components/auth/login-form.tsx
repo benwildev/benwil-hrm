@@ -9,7 +9,6 @@ import {
   EyeOffIcon,
   AlertCircleIcon,
   Loader2Icon,
-  SparklesIcon,
 } from "lucide-react";
 import { loginAction, type LoginState } from "@/server/actions/auth.actions";
 
@@ -22,11 +21,6 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
-  function handleAutoFillDemo() {
-    setEmail("admin@benwil.com");
-    setPassword("Admin123!");
-  }
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -52,7 +46,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="e.g. admin@benwil.com"
+            placeholder="name@company.com"
             className="w-full h-11 pl-10 pr-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 hover:bg-white focus:bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#162E51]/20 focus:border-[#162E51] transition-all font-medium"
           />
         </div>
@@ -115,20 +109,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
         </div>
       </div>
 
-      {/* Quick Demo Helper Line */}
-      <div className="flex items-center justify-between px-0.5 text-xs">
-        <span className="text-[11px] text-neutral-400">
-          Demo: <code className="font-mono text-neutral-600">Admin123!</code>
-        </span>
-        <button
-          type="button"
-          onClick={handleAutoFillDemo}
-          className="text-xs font-bold text-[#162E51] hover:text-[#C52227] hover:underline cursor-pointer transition-colors inline-flex items-center gap-1"
-        >
-          <SparklesIcon className="size-3 text-[#C52227]" />
-          Auto-fill credentials
-        </button>
-      </div>
+
 
       {/* Error Alert */}
       {state?.error ? (
