@@ -5,11 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/)
-  const initials = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : [parts[0]]
-  return initials
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase()
+// "YYYY-MM-DD" for a date input's defaultValue, using the viewer's own local
+// calendar date (not toISOString(), which is UTC and can read as tomorrow or
+// yesterday depending on the viewer's timezone and time of day).
+export function localDateInputValue(date: Date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }

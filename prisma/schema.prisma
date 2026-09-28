@@ -7,530 +7,393 @@ datasource db {
   provider = "postgresql"
 }
 
-model accounts {
-  id                  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id             String  @db.Uuid
-  type                String
-  provider            String
-  provider_account_id String
-  refresh_token       String?
-  access_token        String?
-  expires_at          Int?
-  token_type          String?
-  scope               String?
-  id_token            String?
-  session_state       String?
-  users               users   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+// ==================== Company (Singleton) ====================
 
-  @@unique([provider, provider_account_id])
-  @@index([user_id])
+model Company {
+  id                      String   @id @default("singleton")
+  name                    String   @default("My Company")
+  legalName               String?  @map("legal_name")
+  logoUrl                 String?  @map("logo_url")
+  addressLine             String?  @map("address_line")
+  city                    String?
+  state                   String?
+  country                 String?
+  postalCode              String?  @map("postal_code")
+  phone                   String?
+  email                   String?
+  taxId                   String?  @map("tax_id")
+  timezone                String   @default("UTC")
+  weekendDays             String   @default("0,6") @map("weekend_days")
+  enableAbsenceDeduction  Boolean  @default(true) @map("enable_absence_deduction")
+  absenceCalculationBasis String   @default("WORKING_DAYS") @map("absence_calculation_basis")
+  absenceDeductionRate    Decimal  @default(100) @map("absence_deduction_rate") @db.Decimal(5, 2)
+  enableLateDeduction     Boolean  @default(false) @map("enable_late_deduction")
+  lateGraceCount          Int      @default(3) @map("late_grace_count")
+  lateDeductionBasis      String   @default("ONE_DAY_PER_3_LATES") @map("late_deduction_basis")
+  lateDeductionRate       Decimal  @default(100) @map("late_deduction_rate") @db.Decimal(5, 2)
+  primaryColor            String   @default("oklch(0.205 0 0)") @map("primary_color")
+  primaryForeground       String   @default("oklch(0.985 0 0)") @map("primary_foreground")
+  accentColor             String   @default("oklch(0.97 0 0)") @map("accent_color")
+  accentForeground        String   @default("oklch(0.205 0 0)") @map("accent_foreground")
+  sidebarPrimary          String   @default("oklch(0.205 0 0)") @map("sidebar_primary")
+  sidebarAccent           String   @default("oklch(0.97 0 0)") @map("sidebar_accent")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("companies")
 }
 
-model attendance_adjustments {
-  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  attendance_id      String             @db.Uuid
-  employee_id        String             @db.Uuid
-  old_check_in       DateTime?
-  old_check_out      DateTime?
-  new_check_in       DateTime?
-  new_check_out      DateTime?
-  reason             String
-  adjusted_by        String?            @db.Uuid
-  created_at         DateTime           @default(now())
-  users              users?             @relation(fields: [adjusted_by], references: [id])
-  attendance_records attendance_records @relation(fields: [attendance_id], references: [id], onDelete: Cascade)
-  employees          employees          @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+// ==================== RBAC ====================
 
-  @@index([attendance_id])
-  @@index([employee_id])
-}
-
-model attendance_records {
-  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id            String                   @db.Uuid
-  shift_id               String?                  @db.Uuid
-  attendance_date        DateTime                 @db.Date
-  check_in               DateTime?
-  check_out              DateTime?
-  work_minutes           Int                      @default(0)
-  late_minutes           Int                      @default(0)
-  early_leave_minutes    Int                      @default(0)
-  overtime_minutes       Int                      @default(0)
-  status                 AttendanceStatus         @default(ABSENT)
-  check_in_source        AttendanceSource?
-  check_out_source       AttendanceSource?
-  notes                  String?
-  created_at             DateTime                 @default(now())
-  updated_at             DateTime
-  attendance_adjustments attendance_adjustments[]
-  employees              employees                @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  shifts                 shifts?                  @relation(fields: [shift_id], references: [id])
-
-  @@unique([employee_id, attendance_date])
-  @@index([attendance_date])
-  @@index([check_in])
-  @@index([shift_id])
-  @@index([status, attendance_date])
-}
-
-model audit_logs {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id     String?  @db.Uuid
-  action      String
-  entity_type String
-  entity_id   String?
-  old_data    Json?
-  new_data    Json?
-  ip_address  String?
-  user_agent  String?
-  created_at  DateTime @default(now())
-  users       users?   @relation(fields: [user_id], references: [id])
-
-  @@index([action])
-  @@index([created_at])
-  @@index([entity_type, entity_id])
-  @@index([user_id, created_at])
-}
-
-model biometric_devices {
-  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  device_name       String
-  device_type       String?
-  device_identifier String           @unique
-  ip_address        String?
-  location_name     String?
-  status            String           @default("active")
-  last_sync_at      DateTime?
-  created_at        DateTime         @default(now())
-  updated_at        DateTime
-  api_key           String?          @unique
-  biometric_logs    biometric_logs[]
-}
-
-model biometric_logs {
-  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id       String?            @db.Uuid
-  device_id         String?            @db.Uuid
-  biometric_user_id String?
-  punch_time        DateTime
-  punch_type        PunchType          @default(UNKNOWN)
-  raw_data          Json?
-  created_at        DateTime           @default(now())
-  device_event_id   String?
-  is_processed      Boolean            @default(false)
-  processed_at      DateTime?
-  biometric_devices biometric_devices? @relation(fields: [device_id], references: [id])
-  employees         employees?         @relation(fields: [employee_id], references: [id])
-
-  @@unique([device_id, device_event_id])
-  @@index([device_id, punch_time])
-  @@index([employee_id, punch_time])
-  @@index([is_processed, punch_time])
-}
-
-model companies {
-  id                        String   @id @default("singleton")
-  name                      String   @default("My Company")
-  legal_name                String?
-  logo_url                  String?
-  address_line              String?
-  city                      String?
-  state                     String?
-  country                   String?
-  postal_code               String?
-  phone                     String?
-  email                     String?
-  tax_id                    String?
-  primary_color             String   @default("oklch(0.205 0 0)")
-  primary_foreground        String   @default("oklch(0.985 0 0)")
-  accent_color              String   @default("oklch(0.97 0 0)")
-  accent_foreground         String   @default("oklch(0.205 0 0)")
-  sidebar_primary           String   @default("oklch(0.205 0 0)")
-  sidebar_accent            String   @default("oklch(0.97 0 0)")
-  created_at                DateTime @default(now())
-  updated_at                DateTime
-  absence_calculation_basis String   @default("WORKING_DAYS")
-  absence_deduction_rate    Decimal  @default(100) @db.Decimal(5, 2)
-  enable_absence_deduction  Boolean  @default(true)
-  enable_late_deduction     Boolean  @default(false)
-  late_deduction_basis      String   @default("ONE_DAY_PER_3_LATES")
-  late_deduction_rate       Decimal  @default(100) @db.Decimal(5, 2)
-  late_grace_count          Int      @default(3)
-  timezone                  String   @default("UTC")
-  weekend_days              String   @default("0,6")
-}
-
-model departments {
-  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String      @unique
+model Role {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String           @unique
   description String?
-  created_at  DateTime    @default(now())
-  updated_at  DateTime
-  employees   employees[]
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
 }
 
-model designations {
-  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String      @unique
+model Permission {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String           @unique
+  group       String
   description String?
-  created_at  DateTime    @default(now())
-  updated_at  DateTime
-  employees   employees[]
+  roles       RolePermission[]
+
+  @@map("permissions")
 }
 
-model employee_documents {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id   String    @db.Uuid
-  document_type String
-  document_name String
-  file_url      String
-  notes         String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime
-  employees     employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@index([employee_id])
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
 }
 
-model employee_leave_balances {
-  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id    String      @db.Uuid
-  leave_type_id  String      @db.Uuid
-  year           Int
-  allocated_days Decimal     @default(0) @db.Decimal(5, 2)
-  used_days      Decimal     @default(0) @db.Decimal(5, 2)
-  remaining_days Decimal     @default(0) @db.Decimal(5, 2)
-  created_at     DateTime    @default(now())
-  updated_at     DateTime
-  employees      employees   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  leave_types    leave_types @relation(fields: [leave_type_id], references: [id], onDelete: Cascade)
+// ==================== Auth & Audit ====================
 
-  @@unique([employee_id, leave_type_id, year])
-  @@index([employee_id, year])
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model employee_salaries {
-  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id       String           @db.Uuid
-  basic_salary      Decimal          @db.Decimal(12, 2)
-  effective_from    DateTime         @db.Date
-  effective_to      DateTime?        @db.Date
-  payment_frequency PaymentFrequency @default(MONTHLY)
-  created_at        DateTime         @default(now())
-  updated_at        DateTime
-  employees         employees        @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+model User {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  roleId       String     @map("role_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id])
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  @@index([employee_id, effective_from])
-}
+  employee          Employee?
+  accounts          Account[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  adjustmentsMade   AttendanceAdjustment[] @relation("AdjustedBy")
+  leaveReviews      LeaveRequest[]         @relation("ReviewedBy")
+  payrollsRun       PayrollPeriod[]        @relation("ProcessedBy")
+  disbursementsMade PayrollRecord[]        @relation("DisbursedBy")
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model employee_salary_components {
-  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id         String            @db.Uuid
-  salary_component_id String            @db.Uuid
-  amount              Decimal           @db.Decimal(12, 2)
-  effective_from      DateTime          @db.Date
-  effective_to        DateTime?         @db.Date
-  created_at          DateTime          @default(now())
-  updated_at          DateTime          @default(now())
-  employees           employees         @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  salary_components   salary_components @relation(fields: [salary_component_id], references: [id], onDelete: Cascade)
-
-  @@index([employee_id, effective_from])
-  @@index([salary_component_id])
-}
-
-model employees {
-  id                             String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_code                  String                       @unique
-  full_name                      String
-  profile_photo_url              String?
-  date_of_birth                  DateTime?                    @db.Date
-  gender                         String?
-  marital_status                 String?
-  nationality                    String?
-  blood_group                    String?
-  personal_email                 String?
-  work_email                     String?
-  phone                          String?
-  alternate_phone                String?
-  present_address                String?
-  permanent_address              String?
-  emergency_contact_name         String?
-  emergency_contact_relationship String?
-  emergency_contact_phone        String?
-  joining_date                   DateTime                     @db.Date
-  employment_type                EmploymentType?
-  employment_status              EmploymentStatus             @default(ACTIVE)
-  department_id                  String?                      @db.Uuid
-  designation_id                 String?                      @db.Uuid
-  shift_id                       String?                      @db.Uuid
-  reporting_manager_id           String?                      @db.Uuid
-  resignation_date               DateTime?                    @db.Date
-  termination_date               DateTime?                    @db.Date
-  exit_reason                    String?
-  user_id                        String?                      @unique @db.Uuid
-  created_at                     DateTime                     @default(now())
-  updated_at                     DateTime
-  deleted_at                     DateTime?
-  bank_account_name              String?
-  bank_account_number            String?
-  bank_name                      String?
-  bank_routing_number            String?
-  mobile_banking_number          String?
-  mobile_banking_provider        String?
-  payment_method                 String                       @default("BANK_TRANSFER")
-  attendance_adjustments         attendance_adjustments[]
-  attendance_records             attendance_records[]
-  biometric_logs                 biometric_logs[]
-  employee_documents             employee_documents[]
-  employee_leave_balances        employee_leave_balances[]
-  employee_salaries              employee_salaries[]
-  employee_salary_components     employee_salary_components[]
-  departments                    departments?                 @relation(fields: [department_id], references: [id])
-  designations                   designations?                @relation(fields: [designation_id], references: [id])
-  employees                      employees?                   @relation("employeesToemployees", fields: [reporting_manager_id], references: [id])
-  other_employees                employees[]                  @relation("employeesToemployees")
-  shifts                         shifts?                      @relation(fields: [shift_id], references: [id])
-  users                          users?                       @relation(fields: [user_id], references: [id])
-  leave_requests                 leave_requests[]
-  payroll_records                payroll_records[]
-
-  @@index([deleted_at])
-  @@index([department_id])
-  @@index([designation_id])
-  @@index([employment_status])
-  @@index([reporting_manager_id])
-  @@index([shift_id])
-}
-
-model holidays {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  date                DateTime @db.Date
-  name                String
-  is_recurring_yearly Boolean  @default(false)
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now())
-
-  @@index([date])
-}
-
-model leave_requests {
-  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_id      String      @db.Uuid
-  leave_type_id    String      @db.Uuid
-  start_date       DateTime    @db.Date
-  end_date         DateTime    @db.Date
-  total_days       Decimal     @db.Decimal(5, 2)
-  reason           String?
-  attachment_url   String?
-  status           LeaveStatus @default(PENDING)
-  reviewed_by      String?     @db.Uuid
-  reviewed_at      DateTime?
-  review_note      String?
-  created_at       DateTime    @default(now())
-  updated_at       DateTime
-  half_day_session String?
-  is_half_day      Boolean     @default(false)
-  employees        employees   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  leave_types      leave_types @relation(fields: [leave_type_id], references: [id])
-  users            users?      @relation(fields: [reviewed_by], references: [id])
-
-  @@index([employee_id, status])
-  @@index([leave_type_id])
-  @@index([start_date, end_date])
+  @@index([roleId])
   @@index([status])
+  @@map("users")
 }
 
-model leave_types {
-  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                    String                    @unique
-  description             String?
-  days_per_year           Decimal?                  @db.Decimal(5, 2)
-  is_paid                 Boolean                   @default(true)
-  is_active               Boolean                   @default(true)
-  created_at              DateTime                  @default(now())
-  updated_at              DateTime
-  employee_leave_balances employee_leave_balances[]
-  leave_requests          leave_requests[]
+model Account {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model payroll_items {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  payroll_record_id String          @db.Uuid
-  name              String
-  type              ComponentType
-  amount            Decimal         @db.Decimal(12, 2)
-  description       String?
-  created_at        DateTime        @default(now())
-  payroll_records   payroll_records @relation(fields: [payroll_record_id], references: [id], onDelete: Cascade)
+model Session {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
 
-  @@index([payroll_record_id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
-model payroll_periods {
-  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  year            Int
-  month           Int
-  start_date      DateTime            @db.Date
-  end_date        DateTime            @db.Date
-  status          PayrollPeriodStatus @default(DRAFT)
-  processed_at    DateTime?
-  processed_by    String?             @db.Uuid
-  created_at      DateTime            @default(now())
-  updated_at      DateTime            @default(now())
-  users           users?              @relation(fields: [processed_by], references: [id])
-  payroll_records payroll_records[]
-
-  @@unique([year, month])
-  @@index([status])
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model payroll_records {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  payroll_period_id String          @db.Uuid
-  employee_id       String          @db.Uuid
-  basic_salary      Decimal         @default(0) @db.Decimal(12, 2)
-  total_earnings    Decimal         @default(0) @db.Decimal(12, 2)
-  total_deductions  Decimal         @default(0) @db.Decimal(12, 2)
-  overtime_amount   Decimal         @default(0) @db.Decimal(12, 2)
-  bonus_amount      Decimal         @default(0) @db.Decimal(12, 2)
-  net_salary        Decimal         @default(0) @db.Decimal(12, 2)
-  payment_status    PaymentStatus   @default(PENDING)
-  paid_at           DateTime?
-  created_at        DateTime        @default(now())
-  updated_at        DateTime
-  disbursed_by_id   String?         @db.Uuid
-  payment_method    String?
-  payment_note      String?
-  payment_reference String?
-  payroll_items     payroll_items[]
-  users             users?          @relation(fields: [disbursed_by_id], references: [id])
-  employees         employees       @relation(fields: [employee_id], references: [id])
-  payroll_periods   payroll_periods @relation(fields: [payroll_period_id], references: [id], onDelete: Cascade)
-  payslips          payslips?
-
-  @@unique([payroll_period_id, employee_id])
-  @@index([employee_id])
-  @@index([payment_status])
-  @@index([payroll_period_id])
-}
-
-model payslips {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  payroll_record_id String          @unique @db.Uuid
-  payslip_number    String          @unique
-  file_url          String?
-  generated_at      DateTime        @default(now())
-  payroll_records   payroll_records @relation(fields: [payroll_record_id], references: [id], onDelete: Cascade)
-}
-
-model permissions {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  key              String             @unique
-  group            String
-  description      String?
-  role_permissions role_permissions[]
-}
-
-model role_permissions {
-  role_id       String      @db.Uuid
-  permission_id String      @db.Uuid
-  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade)
-  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade)
-
-  @@id([role_id, permission_id])
-}
-
-model roles {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String             @unique
-  description      String?
-  is_system        Boolean            @default(false)
-  created_at       DateTime           @default(now())
-  updated_at       DateTime
-  role_permissions role_permissions[]
-  users            users[]
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model salary_components {
-  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                       String                       @unique
-  component_type             ComponentType
-  calculation_type           CalculationType              @default(FIXED)
-  default_amount             Decimal                      @default(0) @db.Decimal(12, 2)
-  is_active                  Boolean                      @default(true)
-  created_at                 DateTime                     @default(now())
-  updated_at                 DateTime                     @default(now())
-  employee_salary_components employee_salary_components[]
-}
-
-model sessions {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_token String   @unique
-  user_id       String   @db.Uuid
-  expires       DateTime
-  users         users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-}
-
-model shifts {
-  id                    String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                  String
-  start_time            DateTime             @db.Time(6)
-  end_time              DateTime             @db.Time(6)
-  grace_period_minutes  Int                  @default(0)
-  required_work_minutes Int?
-  break_minutes         Int                  @default(0)
-  is_overnight          Boolean              @default(false)
-  is_active             Boolean              @default(true)
-  created_at            DateTime             @default(now())
-  updated_at            DateTime
-  attendance_records    attendance_records[]
-  employees             employees[]
-}
-
-model users {
-  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                  String                   @unique
-  password_hash          String
-  role_id                String                   @db.Uuid
-  status                 UserStatus               @default(ACTIVE)
-  last_login_at          DateTime?
-  created_at             DateTime                 @default(now())
-  updated_at             DateTime
-  accounts               accounts[]
-  attendance_adjustments attendance_adjustments[]
-  audit_logs             audit_logs[]
-  employees              employees?
-  leave_requests         leave_requests[]
-  payroll_periods        payroll_periods[]
-  payroll_records        payroll_records[]
-  sessions               sessions[]
-  roles                  roles                    @relation(fields: [role_id], references: [id])
-
-  @@index([role_id])
-  @@index([status])
-}
-
-model verification_tokens {
+model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
-enum AttendanceSource {
-  BIOMETRIC
-  MANUAL
-  SYSTEM
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
+
+// ==================== Organization ====================
+
+model Department {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  employees Employee[]
+
+  @@map("departments")
+}
+
+model Designation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  employees Employee[]
+
+  @@map("designations")
+}
+
+model Shift {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  startTime           DateTime @map("start_time") @db.Time
+  endTime             DateTime @map("end_time") @db.Time
+  gracePeriodMinutes  Int      @default(0) @map("grace_period_minutes")
+  requiredWorkMinutes Int?     @map("required_work_minutes")
+  breakMinutes        Int      @default(0) @map("break_minutes")
+  isOvernight         Boolean  @default(false) @map("is_overnight")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  employees         Employee[]
+  attendanceRecords AttendanceRecord[]
+
+  @@map("shifts")
+}
+
+model Holiday {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date              DateTime @db.Date
+  name              String
+  isRecurringYearly Boolean  @default(false) @map("is_recurring_yearly")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@map("holidays")
+}
+
+// ==================== Employee ====================
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  RESIGNED
+  TERMINATED
+  INACTIVE
+}
+
+model Employee {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeCode    String  @unique @map("employee_code")
+  fullName        String  @map("full_name")
+  profilePhotoUrl String? @map("profile_photo_url")
+
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  gender        String?
+  maritalStatus String?   @map("marital_status")
+  nationality   String?
+  bloodGroup    String?   @map("blood_group")
+
+  personalEmail  String? @map("personal_email")
+  workEmail      String? @map("work_email")
+  phone          String?
+  alternatePhone String? @map("alternate_phone")
+
+  presentAddress   String? @map("present_address") @db.Text
+  permanentAddress String? @map("permanent_address") @db.Text
+
+  emergencyContactName         String? @map("emergency_contact_name")
+  emergencyContactRelationship String? @map("emergency_contact_relationship")
+  emergencyContactPhone        String? @map("emergency_contact_phone")
+
+  joiningDate      DateTime         @map("joining_date") @db.Date
+  employmentType   EmploymentType?  @map("employment_type")
+  employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
+
+  departmentId String?     @map("department_id") @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  designationId String?      @map("designation_id") @db.Uuid
+  designation   Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
+
+  shiftId String? @map("shift_id") @db.Uuid
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  reportingManagerId String?    @map("reporting_manager_id") @db.Uuid
+  reportingManager   Employee?  @relation("EmployeeManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  directReports      Employee[] @relation("EmployeeManager")
+
+  resignationDate DateTime? @map("resignation_date") @db.Date
+  terminationDate DateTime? @map("termination_date") @db.Date
+  exitReason      String?   @map("exit_reason") @db.Text
+
+  paymentMethod         String  @default("BANK_TRANSFER") @map("payment_method")
+  bankName              String? @map("bank_name")
+  bankAccountName       String? @map("bank_account_name")
+  bankAccountNumber     String? @map("bank_account_number")
+  bankRoutingNumber     String? @map("bank_routing_number")
+  mobileBankingProvider String? @map("mobile_banking_provider")
+  mobileBankingNumber   String? @map("mobile_banking_number")
+
+  userId String? @unique @map("user_id") @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  documents             EmployeeDocument[]
+  biometricLogs         BiometricLog[]
+  attendanceRecords     AttendanceRecord[]
+  attendanceAdjustments AttendanceAdjustment[]
+  leaveBalances         EmployeeLeaveBalance[]
+  leaveRequests         LeaveRequest[]
+  salaries              EmployeeSalary[]
+  salaryComponents      EmployeeSalaryComponent[]
+  payrollRecords        PayrollRecord[]
+
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([shiftId])
+  @@index([reportingManagerId])
+  @@index([employmentStatus])
+  @@index([deletedAt])
+  @@map("employees")
+}
+
+model EmployeeDocument {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId   String   @map("employee_id") @db.Uuid
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  documentType String   @map("document_type")
+  documentName String   @map("document_name")
+  fileUrl      String   @map("file_url") @db.Text
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@map("employee_documents")
+}
+
+// ==================== Biometric ====================
+
+model BiometricDevice {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deviceName       String    @map("device_name")
+  deviceType       String?   @map("device_type")
+  deviceIdentifier String    @unique @map("device_identifier")
+  ipAddress        String?   @map("ip_address")
+  // Opaque shared secret the device (or an on-prem relay in front of it) must
+  // present via a `key`/`apikey` query param on every push. Optional so an
+  // admin can still fall back to IP allowlisting alone for hardware that
+  // can't be configured with a custom query param — see /api/iclock/*.
+  apiKey           String?   @unique @map("api_key")
+  locationName     String?   @map("location_name")
+  status           String    @default("active")
+  lastSyncAt       DateTime? @map("last_sync_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  logs BiometricLog[]
+
+  @@map("biometric_devices")
+}
+
+enum PunchType {
+  CHECK_IN
+  CHECK_OUT
+  UNKNOWN
+}
+
+model BiometricLog {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId      String?          @map("employee_id") @db.Uuid
+  employee        Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  deviceId        String?          @map("device_id") @db.Uuid
+  device          BiometricDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  biometricUserId String?          @map("biometric_user_id")
+  punchTime       DateTime         @map("punch_time")
+  punchType       PunchType        @default(UNKNOWN) @map("punch_type")
+  deviceEventId   String?          @map("device_event_id")
+  isProcessed     Boolean          @default(false) @map("is_processed")
+  processedAt     DateTime?        @map("processed_at")
+  rawData         Json?            @map("raw_data")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@unique([deviceId, deviceEventId])
+  @@index([employeeId, punchTime])
+  @@index([deviceId, punchTime])
+  @@index([isProcessed, punchTime])
+  @@map("biometric_logs")
+}
+
+// ==================== Attendance ====================
 
 enum AttendanceStatus {
   PRESENT
@@ -542,29 +405,110 @@ enum AttendanceStatus {
   WEEKEND
 }
 
-enum CalculationType {
-  FIXED
-  PERCENTAGE
+enum AttendanceSource {
+  BIOMETRIC
+  MANUAL
+  SYSTEM
 }
 
-enum ComponentType {
-  EARNING
-  DEDUCTION
+model AttendanceRecord {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftId    String?  @map("shift_id") @db.Uuid
+  shift      Shift?   @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  attendanceDate DateTime @map("attendance_date") @db.Date
+
+  checkIn  DateTime? @map("check_in")
+  checkOut DateTime? @map("check_out")
+
+  workMinutes       Int @default(0) @map("work_minutes")
+  lateMinutes       Int @default(0) @map("late_minutes")
+  earlyLeaveMinutes Int @default(0) @map("early_leave_minutes")
+  overtimeMinutes   Int @default(0) @map("overtime_minutes")
+
+  status AttendanceStatus @default(ABSENT)
+
+  checkInSource  AttendanceSource? @map("check_in_source")
+  checkOutSource AttendanceSource? @map("check_out_source")
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  adjustments AttendanceAdjustment[]
+
+  @@unique([employeeId, attendanceDate])
+  @@index([attendanceDate])
+  @@index([status, attendanceDate])
+  @@index([shiftId])
+  @@index([checkIn])
+  @@map("attendance_records")
 }
 
-enum EmploymentStatus {
-  ACTIVE
-  ON_LEAVE
-  RESIGNED
-  TERMINATED
-  INACTIVE
+model AttendanceAdjustment {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attendanceId String           @map("attendance_id") @db.Uuid
+  attendance   AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employeeId   String           @map("employee_id") @db.Uuid
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  oldCheckIn  DateTime? @map("old_check_in")
+  oldCheckOut DateTime? @map("old_check_out")
+  newCheckIn  DateTime? @map("new_check_in")
+  newCheckOut DateTime? @map("new_check_out")
+
+  reason String @db.Text
+
+  adjustedById String? @map("adjusted_by") @db.Uuid
+  adjustedBy   User?   @relation("AdjustedBy", fields: [adjustedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([attendanceId])
+  @@index([employeeId])
+  @@map("attendance_adjustments")
 }
 
-enum EmploymentType {
-  FULL_TIME
-  PART_TIME
-  CONTRACT
-  INTERN
+// ==================== Leave ====================
+
+model LeaveType {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  daysPerYear Decimal? @map("days_per_year") @db.Decimal(5, 2)
+  isPaid      Boolean  @default(true) @map("is_paid")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  balances EmployeeLeaveBalance[]
+  requests LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+model EmployeeLeaveBalance {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  year Int
+
+  allocatedDays Decimal @default(0) @map("allocated_days") @db.Decimal(5, 2)
+  usedDays      Decimal @default(0) @map("used_days") @db.Decimal(5, 2)
+  remainingDays Decimal @default(0) @map("remaining_days") @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId, year])
+  @@map("employee_leave_balances")
 }
 
 enum LeaveStatus {
@@ -574,10 +518,146 @@ enum LeaveStatus {
   CANCELLED
 }
 
+model LeaveRequest {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  startDate      DateTime @map("start_date") @db.Date
+  endDate        DateTime @map("end_date") @db.Date
+  totalDays      Decimal  @map("total_days") @db.Decimal(5, 2)
+  isHalfDay      Boolean  @default(false) @map("is_half_day")
+  halfDaySession String?  @map("half_day_session")
+
+  reason        String? @db.Text
+  attachmentUrl String? @map("attachment_url") @db.Text
+
+  status LeaveStatus @default(PENDING)
+
+  reviewedById String?   @map("reviewed_by") @db.Uuid
+  reviewedBy   User?     @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewNote   String?   @map("review_note") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([employeeId, status])
+  @@index([leaveTypeId])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+// ==================== Salary ====================
+
 enum PaymentFrequency {
   MONTHLY
   BIWEEKLY
   WEEKLY
+}
+
+model EmployeeSalary {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  basicSalary Decimal @map("basic_salary") @db.Decimal(12, 2)
+
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+
+  paymentFrequency PaymentFrequency @default(MONTHLY) @map("payment_frequency")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([employeeId, effectiveFrom])
+  @@map("employee_salaries")
+}
+
+enum ComponentType {
+  EARNING
+  DEDUCTION
+}
+
+enum CalculationType {
+  FIXED
+  PERCENTAGE
+}
+
+model SalaryComponent {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String          @unique
+  componentType   ComponentType   @map("component_type")
+  calculationType CalculationType @default(FIXED) @map("calculation_type")
+  defaultAmount   Decimal         @default(0) @map("default_amount") @db.Decimal(12, 2)
+  isActive        Boolean         @default(true) @map("is_active")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  employeeComponents EmployeeSalaryComponent[]
+
+  @@map("salary_components")
+}
+
+model EmployeeSalaryComponent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  salaryComponentId String          @map("salary_component_id") @db.Uuid
+  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Cascade)
+
+  amount Decimal @db.Decimal(12, 2)
+
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([employeeId, effectiveFrom])
+  @@index([salaryComponentId])
+  @@map("employee_salary_components")
+}
+
+// ==================== Payroll ====================
+
+enum PayrollPeriodStatus {
+  DRAFT
+  PROCESSING
+  CALCULATED
+  COMPLETED
+  APPROVED
+  PAID
+  LOCKED
+}
+
+model PayrollPeriod {
+  id    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  year  Int
+  month Int
+
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+
+  status PayrollPeriodStatus @default(DRAFT)
+
+  processedAt   DateTime? @map("processed_at")
+  processedById String?   @map("processed_by") @db.Uuid
+  processedBy   User?     @relation("ProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  records PayrollRecord[]
+
+  @@unique([year, month])
+  @@index([status])
+  @@map("payroll_periods")
 }
 
 enum PaymentStatus {
@@ -586,24 +666,65 @@ enum PaymentStatus {
   FAILED
 }
 
-enum PayrollPeriodStatus {
-  DRAFT
-  PROCESSING
-  COMPLETED
-  LOCKED
-  CALCULATED
-  APPROVED
-  PAID
+model PayrollRecord {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payrollPeriodId String        @map("payroll_period_id") @db.Uuid
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String        @map("employee_id") @db.Uuid
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  basicSalary     Decimal @default(0) @map("basic_salary") @db.Decimal(12, 2)
+  totalEarnings   Decimal @default(0) @map("total_earnings") @db.Decimal(12, 2)
+  totalDeductions Decimal @default(0) @map("total_deductions") @db.Decimal(12, 2)
+  overtimeAmount  Decimal @default(0) @map("overtime_amount") @db.Decimal(12, 2)
+  bonusAmount     Decimal @default(0) @map("bonus_amount") @db.Decimal(12, 2)
+  netSalary       Decimal @default(0) @map("net_salary") @db.Decimal(12, 2)
+
+  paymentStatus    PaymentStatus @default(PENDING) @map("payment_status")
+  paidAt           DateTime?     @map("paid_at")
+  paymentMethod    String?       @map("payment_method")
+  paymentReference String?       @map("payment_reference")
+  paymentNote      String?       @map("payment_note") @db.Text
+  disbursedById    String?       @map("disbursed_by_id") @db.Uuid
+  disbursedBy      User?         @relation("DisbursedBy", fields: [disbursedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items   PayrollItem[]
+  payslip Payslip?
+
+  @@unique([payrollPeriodId, employeeId])
+  @@index([employeeId])
+  @@index([payrollPeriodId])
+  @@index([paymentStatus])
+  @@map("payroll_records")
 }
 
-enum PunchType {
-  CHECK_IN
-  CHECK_OUT
-  UNKNOWN
+model PayrollItem {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payrollRecordId String        @map("payroll_record_id") @db.Uuid
+  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        ComponentType
+  amount      Decimal       @db.Decimal(12, 2)
+  description String?       @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([payrollRecordId])
+  @@map("payroll_items")
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
+model Payslip {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payrollRecordId String        @unique @map("payroll_record_id") @db.Uuid
+  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
+
+  payslipNumber String   @unique @map("payslip_number")
+  fileUrl       String?  @map("file_url") @db.Text
+  generatedAt   DateTime @default(now()) @map("generated_at")
+
+  @@map("payslips")
 }

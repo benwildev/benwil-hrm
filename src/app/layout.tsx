@@ -1,39 +1,47 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { getCompany } from "@/server/dal/company";
+import { BrandStyle } from "@/components/layout/brand-style";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/features/auth/auth-context";
-
-const sans = Plus_Jakarta_Sans({
+const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
-const mono = JetBrains_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600"],
 });
 
-export const metadata: Metadata = {
-  title: "Benwil HRM — Workspace",
-  description: "Modern HR management platform for a single company.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const company = await getCompany();
+  return {
+    title: `${company.name} HRM`,
+    description: `${company.name} human resource management system`,
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const company = await getCompany();
+
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable} h-full antialiased`} suppressHydrationWarning>
-      <body className="min-h-full font-sans bg-background text-foreground selection:bg-zinc-900 selection:text-white" suppressHydrationWarning>
-        <AuthProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-        </AuthProvider>
-      </body>
+    <html
+      lang="en"
+      className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+    >
+      <head>
+        <BrandStyle company={company} />
+      </head>
+      <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>{children}</body>
     </html>
   );
 }
