@@ -16,6 +16,7 @@ import {
   CheckIcon,
   Building2Icon,
   IdCardIcon,
+  FingerprintIcon,
   ClockIcon,
   EyeIcon,
   EyeOffIcon,
@@ -39,6 +40,7 @@ type Option = { id: string; name: string };
 
 type EmployeeDefaults = {
   employeeCode?: string;
+  biometricUserId?: string | null;
   fullName?: string;
   profilePhotoUrl?: string | null;
   personalEmail?: string | null;
@@ -430,6 +432,31 @@ export function EmployeeForm({
                     className="w-full h-11 pl-10 pr-3.5 rounded-xl border border-neutral-200/90 bg-[#fcfdfe] hover:bg-white focus:bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
                   />
                 </div>
+              </div>
+
+              {/* Biometric Device ID */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="biometricUserId" className="text-xs font-bold text-neutral-700">
+                  Biometric Device ID
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                    <FingerprintIcon className="size-4" />
+                  </div>
+                  <input
+                    id="biometricUserId"
+                    name="biometricUserId"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    defaultValue={defaults?.biometricUserId ?? ""}
+                    placeholder="e.g. 1042"
+                    className="w-full h-11 pl-10 pr-3.5 rounded-xl border border-neutral-200/90 bg-[#fcfdfe] hover:bg-white focus:bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-neutral-400">
+                  Numbers only — enroll this same value as the User ID/PIN on the biometric terminal.
+                </p>
               </div>
 
               {/* Full Name */}

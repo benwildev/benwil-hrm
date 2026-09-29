@@ -19,8 +19,11 @@ import type { BiometricDevice } from "@/generated/prisma/client";
 // what actually closes the gap, and is called out in the admin UI.
 export function getRequestIp(request: Request): string | null {
   const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || null;
-  return request.headers.get("x-real-ip");
+  let ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() || null : request.headers.get("x-real-ip");
+  if (ip && ip.startsWith("::ffff:")) {
+    ip = ip.substring(7);
+  }
+  return ip;
 }
 
 export function verifyDeviceRequest(

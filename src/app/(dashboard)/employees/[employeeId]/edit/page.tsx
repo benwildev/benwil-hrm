@@ -31,6 +31,7 @@ export default async function EditEmployeePage({
         currentEmployeeId={employee.id}
         defaults={{
           employeeCode: employee.employeeCode,
+          biometricUserId: employee.biometricUserId,
           fullName: employee.fullName,
           profilePhotoUrl: employee.profilePhotoUrl,
           personalEmail: employee.personalEmail,

@@ -19,17 +19,22 @@ function str(formData: FormData, key: string): string | undefined {
 
 function parseEmployeeInput(formData: FormData): EmployeeInput | { error: string } {
   const employeeCode = str(formData, "employeeCode");
+  const biometricUserId = str(formData, "biometricUserId");
   const fullName = str(formData, "fullName");
   const joiningDate = str(formData, "joiningDate");
   const employmentStatus = str(formData, "employmentStatus") as EmployeeInput["employmentStatus"] | undefined;
 
   if (!employeeCode) return { error: "Employee code is required." };
+  if (biometricUserId && !/^\d+$/.test(biometricUserId)) {
+    return { error: "Biometric device ID must contain digits only — that's what the terminal's User ID/PIN field accepts." };
+  }
   if (!fullName) return { error: "Full name is required." };
   if (!joiningDate) return { error: "Joining date is required." };
   if (!employmentStatus) return { error: "Employment status is required." };
 
   return {
     employeeCode,
+    biometricUserId,
     fullName,
     profilePhotoUrl: str(formData, "profilePhotoUrl") || null,
     joiningDate,

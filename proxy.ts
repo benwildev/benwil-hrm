@@ -12,6 +12,13 @@ function isSessionCookiePresent(req: NextRequest) {
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Allow biometrics push endpoints through to /api/iclock without authentication
+  if (pathname.startsWith("/iclock")) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/api${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   if (
     PUBLIC_PATHS.some((path) => pathname.startsWith(path)) ||
     pathname.startsWith("/api") ||

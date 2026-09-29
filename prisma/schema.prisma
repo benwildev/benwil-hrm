@@ -250,6 +250,10 @@ enum EmploymentStatus {
 model Employee {
   id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   employeeCode    String  @unique @map("employee_code")
+  // Numeric User ID/PIN enrolled on the biometric terminal — kept separate
+  // from employeeCode because most terminal firmware only accepts digits,
+  // while employeeCode is free-form (e.g. "EMP-001").
+  biometricUserId String? @unique @map("biometric_user_id")
   fullName        String  @map("full_name")
   profilePhotoUrl String? @map("profile_photo_url")
 

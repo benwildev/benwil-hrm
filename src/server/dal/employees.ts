@@ -64,6 +64,7 @@ export async function listEmployeesForPicker() {
 
 export type EmployeeInput = {
   employeeCode: string;
+  biometricUserId?: string | null;
   fullName: string;
   profilePhotoUrl?: string | null;
   personalEmail?: string;
@@ -125,6 +126,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
     return tx.employee.create({
       data: {
         employeeCode: input.employeeCode,
+        biometricUserId: input.biometricUserId || null,
         fullName: input.fullName,
         profilePhotoUrl: input.profilePhotoUrl || null,
         personalEmail: input.personalEmail,
@@ -174,6 +176,7 @@ export async function updateEmployee(id: string, input: EmployeeInput) {
     where: { id },
     data: {
       employeeCode: input.employeeCode,
+      biometricUserId: input.biometricUserId || null,
       fullName: input.fullName,
       profilePhotoUrl: input.profilePhotoUrl !== undefined ? input.profilePhotoUrl : undefined,
       personalEmail: input.personalEmail,

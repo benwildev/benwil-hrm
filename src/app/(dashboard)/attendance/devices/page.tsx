@@ -43,8 +43,9 @@ export default async function DevicesPage() {
             On the device&apos;s network/server settings, set the server address to this app&apos;s URL and the
             path to <code className="rounded bg-muted px-1">/api/iclock</code> (e.g.{" "}
             <code className="rounded bg-muted px-1">https://yourdomain.com/iclock</code>). Enroll each
-            employee&apos;s fingerprint using their <strong>employee code</strong> as the device user ID/PIN —
-            that&apos;s how punches get matched back to the right employee here.
+            employee&apos;s fingerprint using the numeric <strong>Biometric Device ID</strong> set on their
+            profile (Employees → edit) as the device user ID/PIN — that&apos;s how punches get matched back
+            to the right employee here.
           </CardDescription>
         </CardHeader>
       </Card>

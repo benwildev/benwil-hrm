@@ -35,14 +35,25 @@ export async function ingestPunches(
 ) {
   const deviceId = options.deviceId ?? (await resolveCsvImportDeviceId());
 
-  // Employee device PINs are assumed to match the employee code — the
-  // convention to use when enrolling fingerprints on the physical terminal.
+  // Employee device PINs are matched primarily against Employee.biometricUserId,
+  // falling back to Employee.employeeCode if not set.
   const pins = [...new Set(punches.map((p) => p.biometricUserId))];
   const employees = await prisma.employee.findMany({
-    where: { employeeCode: { in: pins } },
-    select: { id: true, employeeCode: true },
+    where: {
+      OR: [
+        { biometricUserId: { in: pins } },
+        { employeeCode: { in: pins } },
+      ],
+    },
+    select: { id: true, biometricUserId: true, employeeCode: true },
   });
-  const employeeByPin = new Map(employees.map((e) => [e.employeeCode, e.id]));
+  const employeeByPin = new Map<string, string>();
+  for (const e of employees) {
+    if (e.employeeCode) employeeByPin.set(e.employeeCode, e.id);
+  }
+  for (const e of employees) {
+    if (e.biometricUserId) employeeByPin.set(e.biometricUserId, e.id);
+  }
 
   const affected = new Map<string, { employeeId: string; date: Date }>();
   let matched = 0;
